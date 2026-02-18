@@ -1,5 +1,7 @@
 # Secrets
 .env
+.env.local
+.env.*.local
 credentials.json
 
 # Logs
@@ -9,12 +11,36 @@ credentials.json
 __pycache__/
 *.py[cod]
 *.pyo
+*$py.class
+*.egg-info/
+.eggs/
+*.egg
+dist/
+build/
 .venv/
 venv/
 env/
-dist/
-build/
-*.egg-info/
 
-# macOS
+# Node
+node_modules/
+.next/
+out/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Claude Code personal files
+CLAUDE.local.md
