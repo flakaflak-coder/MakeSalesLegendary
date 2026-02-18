@@ -54,8 +54,8 @@ A signal-based lead generation engine that finds companies with active hiring pa
 - **Database:** PostgreSQL with pgvector (for future similarity search on vacancy texts)
 - **Task queue:** Celery + Redis (scheduled scraping, enrichment jobs)
 - **LLM:** Claude API (vacancy text extraction, scoring refinement)
-- **Scraping:** SerpAPI (Google Jobs) as primary, httpx + BeautifulSoup as fallback scrapers
-- **External APIs:** KvK Handelsregister, Company.info, LinkedIn (via Proxycurl when needed)
+- **Scraping:** SerpAPI (Google Jobs) as primary, LinkedIn Jobs (via RapidAPI) as secondary, httpx + BeautifulSoup as fallback scrapers
+- **External APIs:** KvK Handelsregister, Company.info, Apollo.io (decision maker enrichment), LinkedIn (via Proxycurl when needed)
 
 ---
 
@@ -294,9 +294,9 @@ GET    /api/analytics/term-performance  — Which search terms yield best leads
 - [ ] LLM prompt refinement pipeline (extraction corrections → prompt updates)
 
 ### Phase 5: Scale & Polish
-- [ ] Additional scraping sources (Nationale Vacaturebank, company career pages)
+- [ ] Additional scraping sources (LinkedIn Jobs via RapidAPI, Nationale Vacaturebank, company career pages)
 - [ ] CRM integration (HubSpot/Salesforce webhook push)
-- [ ] Decision maker enrichment (LinkedIn via Proxycurl)
+- [ ] Decision maker enrichment (Apollo.io for contacts + LinkedIn via Proxycurl for profiles)
 - [ ] Second profile: launch another digital employee type
 - [ ] Alerting: notify sales instantly when a hot lead appears
 
