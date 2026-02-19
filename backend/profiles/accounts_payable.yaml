@@ -1,0 +1,33 @@
+profile:
+  name: "Accounts Payable"
+  slug: "ap"
+  description: "Crediteurenadministratie & factuurverwerking"
+
+  search_terms:
+    primary:
+      - term: "crediteurenadministratie"
+        language: "nl"
+      - term: "crediteurenadministrateur"
+        language: "nl"
+      - term: "accounts payable"
+        language: "en"
+      - term: "AP medewerker"
+        language: "nl"
+    secondary:
+      - term: "inkoopfacturen"
+        language: "nl"
+      - term: "factuurverwerking"
+        language: "nl"
+      - term: "purchase-to-pay"
+        language: "en"
+      - term: "P2P medewerker"
+        language: "nl"
+      - term: "financieel administratief medewerker"
+        language: "nl"
+    seniority_signals:
+      - term: "teamleider crediteuren"
+        language: "nl"
+      - term: "manager accounts payable"
+        language: "en"
+      - term: "hoofd financiële administratie"
+        language: "nl"
