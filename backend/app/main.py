@@ -1,6 +1,7 @@
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 import app.models  # noqa: F401
 from app.api.analytics import router as analytics_router
@@ -13,6 +14,7 @@ from app.api.profiles import router as profiles_router
 from app.api.scoring import router as scoring_router
 from app.auth import require_admin
 from app.config import settings
+from app.database import engine
 
 app = FastAPI(
     title="Signal Engine",
@@ -40,7 +42,15 @@ app.include_router(chat_router, dependencies=[Depends(require_admin)])
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok"}
+    status = "ok"
+    db_status = "ok"
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except Exception:
+        status = "degraded"
+        db_status = "error"
+    return {"status": status, "db": db_status}
 
 
 @app.exception_handler(Exception)
