@@ -1,13 +1,14 @@
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.harvest import HarvestRun
+from app.models.profile import SearchProfile
 from app.services.event_log import log_event
 from app.worker import trigger_harvest_task
 
@@ -18,7 +19,7 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 class TriggerRequest(BaseModel):
     profile_id: int
-    source: str = "google_jobs"
+    source: Literal["google_jobs", "indeed"] = "google_jobs"
 
 
 class HarvestRunResponse(BaseModel):
@@ -38,6 +39,9 @@ class HarvestRunResponse(BaseModel):
 @router.post("/trigger", status_code=202)
 async def trigger_harvest(payload: TriggerRequest, db: DbSession) -> dict:
     """Queue a harvest run for a profile."""
+    profile = await db.get(SearchProfile, payload.profile_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Search profile not found")
     task = trigger_harvest_task.delay(payload.profile_id, payload.source)
     log_event(
         db,

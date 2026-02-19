@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import app.models  # noqa: F401
@@ -10,6 +10,7 @@ from app.api.harvest import router as harvest_router
 from app.api.leads import router as leads_router
 from app.api.profiles import router as profiles_router
 from app.api.scoring import router as scoring_router
+from app.auth import require_admin
 
 app = FastAPI(
     title="Signal Engine",
@@ -25,14 +26,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(profiles_router)
-app.include_router(harvest_router)
-app.include_router(enrichment_router)
-app.include_router(leads_router)
-app.include_router(analytics_router)
-app.include_router(scoring_router)
-app.include_router(events_router)
-app.include_router(chat_router)
+app.include_router(profiles_router, dependencies=[Depends(require_admin)])
+app.include_router(harvest_router, dependencies=[Depends(require_admin)])
+app.include_router(enrichment_router, dependencies=[Depends(require_admin)])
+app.include_router(leads_router, dependencies=[Depends(require_admin)])
+app.include_router(analytics_router, dependencies=[Depends(require_admin)])
+app.include_router(scoring_router, dependencies=[Depends(require_admin)])
+app.include_router(events_router, dependencies=[Depends(require_admin)])
+app.include_router(chat_router, dependencies=[Depends(require_admin)])
 
 
 @app.get("/health")

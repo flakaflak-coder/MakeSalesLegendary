@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -41,4 +42,4 @@ class EnrichmentRunResponse(BaseModel):
 
 class EnrichmentTriggerRequest(BaseModel):
     profile_id: int
-    pass_type: str = "llm"
+    pass_type: Literal["llm", "external", "both"] = "both"

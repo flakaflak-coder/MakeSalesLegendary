@@ -11,11 +11,17 @@ def log_event(
     entity_id: int | None = None,
     metadata: dict | None = None,
 ) -> EventLog:
+    """Create an EventLog and add it to the session.
+
+    The caller is responsible for committing the session (``await db.commit()``)
+    to persist the event. ``db.add()`` itself is synchronous, so this helper
+    does not need to be async.
+    """
     event = EventLog(
         event_type=event_type,
         entity_type=entity_type,
         entity_id=entity_id,
-        metadata=metadata or {},
+        event_metadata=metadata or {},
     )
     db.add(event)
     return event

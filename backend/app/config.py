@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     apollo_api_base_url: str = "https://api.apollo.io/api/v1"
     api_cache_enabled: bool = True
     api_cache_max_age_days: int = 30
+    admin_token: str | None = None
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
