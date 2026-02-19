@@ -2,18 +2,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy import func, select
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.compiler import compiles
 
 from app.models.company import Company
 from app.scrapers.serpapi import SerpApiResult
 from app.services.harvester import HarvestService
-
-
-# SQLite doesn't support JSONB — compile it as JSON for tests
-@compiles(JSONB, "sqlite")
-def compile_jsonb_sqlite(type_, compiler, **kw):
-    return "JSON"
 
 
 def _make_serpapi_results() -> list[SerpApiResult]:

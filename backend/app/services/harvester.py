@@ -72,15 +72,15 @@ class HarvestService:
         """Search all terms for a profile using the given source."""
         all_results: list[SerpApiResult | IndeedResult] = []
 
+        if source == "google_jobs":
+            harvester = SerpApiHarvester(api_key=settings.serpapi_key)
+        elif source == "indeed":
+            harvester = IndeedScraper()
+        else:
+            raise ValueError(f"Unknown source: {source}")
+
         for term in profile.search_terms:
-            if source == "google_jobs":
-                harvester = SerpApiHarvester(api_key=settings.serpapi_key)
-                results = await harvester.search(term.term)
-            elif source == "indeed":
-                scraper = IndeedScraper()
-                results = await scraper.search(term.term)
-            else:
-                raise ValueError(f"Unknown source: {source}")
+            results = await harvester.search(term.term)
             all_results.extend(results)
 
         return all_results

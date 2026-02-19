@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from dataclasses import dataclass
 
@@ -7,6 +8,39 @@ from app.config import settings
 from app.utils.api_cache import cache_get, cache_put
 
 logger = logging.getLogger(__name__)
+
+
+async def _request_with_retry(
+    client: httpx.AsyncClient, url: str, params: dict, max_retries: int = 3
+) -> dict:
+    """Make a GET request with retry on 5xx errors, connection errors, and timeouts."""
+    for attempt in range(max_retries):
+        try:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            return response.json()
+        except (
+            httpx.HTTPStatusError,
+            httpx.ConnectError,
+            httpx.TimeoutException,
+        ) as exc:
+            if (
+                isinstance(exc, httpx.HTTPStatusError)
+                and exc.response.status_code < 500
+            ):
+                raise
+            if attempt == max_retries - 1:
+                raise
+            wait_time = 2**attempt
+            logger.warning(
+                "SerpAPI request failed (attempt %d/%d), retrying in %ds: %s",
+                attempt + 1,
+                max_retries,
+                wait_time,
+                exc,
+            )
+            await asyncio.sleep(wait_time)
+    raise RuntimeError("Unreachable")
 
 SERPAPI_BASE_URL = "https://serpapi.com/search"
 
@@ -49,9 +83,7 @@ class SerpApiHarvester:
         logger.info("SerpAPI search: query=%r location=%r", query, location)
 
         async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.get(SERPAPI_BASE_URL, params=params)
-            response.raise_for_status()
-            data = response.json()
+            data = await _request_with_retry(client, SERPAPI_BASE_URL, params)
 
         if settings.api_cache_enabled:
             cache_put("serpapi", cache_params, data)

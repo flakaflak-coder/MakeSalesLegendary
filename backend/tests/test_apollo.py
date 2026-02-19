@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from app.integrations.apollo import ApolloClient, ApolloCompanyData, ApolloContact
+from app.utils.ranges import employee_count_to_range, revenue_to_range
 
 
 @pytest.fixture
@@ -210,64 +211,64 @@ class TestEmployeeCountToRange:
     """Test the _employee_count_to_range static method."""
 
     def test_micro(self):
-        assert ApolloClient._employee_count_to_range(5) == "1-9"
+        assert employee_count_to_range(5) == "1-9"
 
     def test_small(self):
-        assert ApolloClient._employee_count_to_range(25) == "10-49"
+        assert employee_count_to_range(25) == "10-49"
 
     def test_medium_small(self):
-        assert ApolloClient._employee_count_to_range(75) == "50-99"
+        assert employee_count_to_range(75) == "50-99"
 
     def test_medium(self):
-        assert ApolloClient._employee_count_to_range(150) == "100-199"
+        assert employee_count_to_range(150) == "100-199"
 
     def test_medium_large(self):
-        assert ApolloClient._employee_count_to_range(350) == "200-499"
+        assert employee_count_to_range(350) == "200-499"
 
     def test_large(self):
-        assert ApolloClient._employee_count_to_range(750) == "500-999"
+        assert employee_count_to_range(750) == "500-999"
 
     def test_enterprise(self):
-        assert ApolloClient._employee_count_to_range(5000) == "1000+"
+        assert employee_count_to_range(5000) == "1000+"
 
     def test_boundary_10(self):
-        assert ApolloClient._employee_count_to_range(9) == "1-9"
-        assert ApolloClient._employee_count_to_range(10) == "10-49"
+        assert employee_count_to_range(9) == "1-9"
+        assert employee_count_to_range(10) == "10-49"
 
     def test_boundary_50(self):
-        assert ApolloClient._employee_count_to_range(49) == "10-49"
-        assert ApolloClient._employee_count_to_range(50) == "50-99"
+        assert employee_count_to_range(49) == "10-49"
+        assert employee_count_to_range(50) == "50-99"
 
     def test_boundary_1000(self):
-        assert ApolloClient._employee_count_to_range(999) == "500-999"
-        assert ApolloClient._employee_count_to_range(1000) == "1000+"
+        assert employee_count_to_range(999) == "500-999"
+        assert employee_count_to_range(1000) == "1000+"
 
 
 class TestRevenueToRange:
     """Test the _revenue_to_range static method."""
 
     def test_under_1m(self):
-        assert ApolloClient._revenue_to_range(500_000) == "<1M"
+        assert revenue_to_range(500_000) == "<1M"
 
     def test_1m_to_10m(self):
-        assert ApolloClient._revenue_to_range(5_000_000) == "1M-10M"
+        assert revenue_to_range(5_000_000) == "1M-10M"
 
     def test_10m_to_50m(self):
-        assert ApolloClient._revenue_to_range(25_000_000) == "10M-50M"
+        assert revenue_to_range(25_000_000) == "10M-50M"
 
     def test_50m_to_100m(self):
-        assert ApolloClient._revenue_to_range(75_000_000) == "50M-100M"
+        assert revenue_to_range(75_000_000) == "50M-100M"
 
     def test_100m_to_500m(self):
-        assert ApolloClient._revenue_to_range(250_000_000) == "100M-500M"
+        assert revenue_to_range(250_000_000) == "100M-500M"
 
     def test_over_500m(self):
-        assert ApolloClient._revenue_to_range(1_000_000_000) == "500M+"
+        assert revenue_to_range(1_000_000_000) == "500M+"
 
     def test_boundary_1m(self):
-        assert ApolloClient._revenue_to_range(999_999) == "<1M"
-        assert ApolloClient._revenue_to_range(1_000_000) == "1M-10M"
+        assert revenue_to_range(999_999) == "<1M"
+        assert revenue_to_range(1_000_000) == "1M-10M"
 
     def test_boundary_500m(self):
-        assert ApolloClient._revenue_to_range(499_999_999) == "100M-500M"
-        assert ApolloClient._revenue_to_range(500_000_000) == "500M+"
+        assert revenue_to_range(499_999_999) == "100M-500M"
+        assert revenue_to_range(500_000_000) == "500M+"

@@ -1,6 +1,7 @@
 import os
+from typing import Annotated
 
-from fastapi import Depends, HTTPException
+from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import settings
@@ -8,14 +9,10 @@ from app.config import settings
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-def _get_credentials(
-    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-) -> HTTPAuthorizationCredentials | None:
-    return credentials
-
-
 def require_admin(
-    credentials: HTTPAuthorizationCredentials | None = Depends(_get_credentials),
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None, Security(bearer_scheme)
+    ],
 ) -> None:
     if os.getenv("PYTEST_CURRENT_TEST"):
         return

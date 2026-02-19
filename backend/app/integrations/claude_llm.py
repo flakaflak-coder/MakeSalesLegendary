@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import logging
 from dataclasses import dataclass, field
@@ -96,31 +97,75 @@ class ClaudeLLMClient:
             len(vacancy_text),
         )
 
-        try:
-            response = await self._client.messages.create(
-                model=self.model,
-                max_tokens=1024,
-                system=system_prompt,
-                tools=[tool],
-                tool_choice={"type": "tool", "name": "extract_vacancy_data"},
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Extract structured data from this job vacancy text:\n\n"
-                            f"---\n{vacancy_text}\n---"
-                        ),
-                    }
-                ],
-                timeout=60.0,
-            )
-        except Exception as exc:
-            logger.error("LLM extraction failed: %s", exc)
-            return ExtractionResult(
-                success=False,
-                error=str(exc),
-                model=self.model,
-            )
+        max_retries = 3
+        backoff_base = 1.0
+        for attempt in range(max_retries + 1):
+            try:
+                prompt = (
+                    "Extract structured data from this job vacancy text:\n\n"
+                    f"---\n{vacancy_text}\n---"
+                )
+                response = await self._client.messages.create(
+                    model=self.model,
+                    max_tokens=1024,
+                    system=system_prompt,
+                    tools=[tool],
+                    tool_choice={"type": "tool", "name": "extract_vacancy_data"},
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": (
+                                prompt
+                            ),
+                        }
+                    ],
+                    timeout=60.0,
+                )
+                break  # Success — exit retry loop
+            except anthropic.APIStatusError as exc:
+                retryable = exc.status_code == 429 or exc.status_code >= 500
+                if retryable and attempt < max_retries:
+                    wait = backoff_base * (2**attempt)
+                    logger.warning(
+                        "LLM request returned %d, retrying in %.1fs (attempt %d/%d)",
+                        exc.status_code,
+                        wait,
+                        attempt + 1,
+                        max_retries,
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                logger.error("LLM extraction failed: %s", exc)
+                return ExtractionResult(
+                    success=False,
+                    error=str(exc),
+                    model=self.model,
+                )
+            except anthropic.APIConnectionError as exc:
+                if attempt < max_retries:
+                    wait = backoff_base * (2**attempt)
+                    logger.warning(
+                        "LLM connection error, retrying in %.1fs (attempt %d/%d): %s",
+                        wait,
+                        attempt + 1,
+                        max_retries,
+                        exc,
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                logger.error("LLM extraction failed: %s", exc)
+                return ExtractionResult(
+                    success=False,
+                    error=str(exc),
+                    model=self.model,
+                )
+            except Exception as exc:
+                logger.error("LLM extraction failed: %s", exc)
+                return ExtractionResult(
+                    success=False,
+                    error=str(exc),
+                    model=self.model,
+                )
 
         # Parse tool_use response
         extracted_data = {}

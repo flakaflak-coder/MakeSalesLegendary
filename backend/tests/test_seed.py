@@ -1,14 +1,6 @@
 import pytest
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.compiler import compiles
 
 from app.services.seed import load_profile_yaml, seed_profile
-
-
-# SQLite doesn't support JSONB — compile it as JSON for tests
-@compiles(JSONB, "sqlite")
-def compile_jsonb_sqlite(type_, compiler, **kw):
-    return "JSON"
 
 
 def test_load_profile_yaml():

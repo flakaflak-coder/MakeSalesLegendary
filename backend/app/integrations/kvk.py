@@ -1,5 +1,5 @@
+import asyncio
 import logging
-import os
 from dataclasses import dataclass, field
 
 import httpx
@@ -8,6 +8,44 @@ from app.config import settings
 from app.utils.api_cache import cache_get, cache_put
 
 logger = logging.getLogger(__name__)
+
+
+async def _request_with_retry(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    params: dict | None = None,
+    headers: dict | None = None,
+    max_retries: int = 3,
+) -> dict:
+    """Make a GET request with retry on 5xx errors, connection errors, and timeouts."""
+    for attempt in range(max_retries):
+        try:
+            response = await client.get(url, params=params, headers=headers)
+            response.raise_for_status()
+            return response.json()
+        except (
+            httpx.HTTPStatusError,
+            httpx.ConnectError,
+            httpx.TimeoutException,
+        ) as exc:
+            if (
+                isinstance(exc, httpx.HTTPStatusError)
+                and exc.response.status_code < 500
+            ):
+                raise
+            if attempt == max_retries - 1:
+                raise
+            wait_time = 2**attempt
+            logger.warning(
+                "KvK request failed (attempt %d/%d), retrying in %ds: %s",
+                attempt + 1,
+                max_retries,
+                wait_time,
+                exc,
+            )
+            await asyncio.sleep(wait_time)
+    raise RuntimeError("Unreachable")
 
 
 @dataclass
@@ -30,18 +68,18 @@ class KvKClient:
         self.base_url = base_url
 
     async def _get(self, url: str, params: dict | None = None) -> dict:
-        """Make an authenticated GET request to the KvK API."""
+        """Make an authenticated GET request to the KvK API with retry."""
         headers = {"apikey": self.api_key}
         async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.get(url, params=params, headers=headers)
-            response.raise_for_status()
-            return response.json()
+            return await _request_with_retry(
+                client, url, params=params, headers=headers
+            )
 
     async def search_by_name(self, company_name: str) -> list[dict]:
         """Search KvK by company name. Returns raw result list."""
         cache_params = {"action": "search", "name": company_name}
 
-        if self._cache_enabled():
+        if settings.api_cache_enabled:
             cached = cache_get("kvk", cache_params, settings.api_cache_max_age_days)
             if cached is not None:
                 logger.info("KvK cache hit: search %r", company_name)
@@ -52,7 +90,7 @@ class KvKClient:
                 f"{self.base_url}/api/v2/zoeken",
                 params={"naam": company_name, "pagina": 1, "resultatenPerPagina": 10},
             )
-            if self._cache_enabled():
+            if settings.api_cache_enabled:
                 cache_put("kvk", cache_params, data)
             return data.get("resultaten", [])
         except Exception as exc:
@@ -70,7 +108,7 @@ class KvKClient:
         """Get full company profile by KvK number."""
         cache_params = {"action": "profile", "kvk_number": kvk_number}
 
-        if self._cache_enabled():
+        if settings.api_cache_enabled:
             cached = cache_get("kvk", cache_params, settings.api_cache_max_age_days)
             if cached is not None:
                 logger.info("KvK cache hit: profile %s", kvk_number)
@@ -81,19 +119,13 @@ class KvKClient:
             data = await self._get(
                 f"{self.base_url}/api/v1/basisprofielen/{kvk_number}"
             )
-            if self._cache_enabled():
+            if settings.api_cache_enabled:
                 cache_put("kvk", cache_params, data)
         except Exception as exc:
             logger.error("KvK profile fetch failed for %s: %s", kvk_number, exc)
             return None
 
         return self._parse_profile(kvk_number, data)
-
-    @staticmethod
-    def _cache_enabled() -> bool:
-        if not settings.api_cache_enabled:
-            return False
-        return "PYTEST_CURRENT_TEST" not in os.environ
 
     @staticmethod
     def _parse_profile(kvk_number: str, data: dict) -> KvKCompanyData:

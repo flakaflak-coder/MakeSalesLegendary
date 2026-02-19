@@ -2,14 +2,6 @@ from unittest.mock import patch
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.compiler import compiles
-
-
-# SQLite doesn't support JSONB — compile it as JSON for tests
-@compiles(JSONB, "sqlite")
-def compile_jsonb_sqlite(type_, compiler, **kw):
-    return "JSON"
 
 
 @pytest.mark.asyncio

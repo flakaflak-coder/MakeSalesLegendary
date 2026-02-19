@@ -1,14 +1,6 @@
 import pytest
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.compiler import compiles
 
 from app.services.dedup import find_or_create_company, normalize_company_name
-
-
-# SQLite doesn't support JSONB — compile it as JSON for tests
-@compiles(JSONB, "sqlite")
-def compile_jsonb_sqlite(type_, compiler, **kw):
-    return "JSON"
 
 
 def test_normalize_strips_legal_suffixes():

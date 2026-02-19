@@ -1,6 +1,7 @@
 import logging
+from collections import defaultdict
 
-from sqlalchemy import distinct, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Company
@@ -71,41 +72,40 @@ class EnrichmentOrchestrator:
         if not prompt:
             return
 
-        # Find all companies with extracted vacancies for this profile
+        # Load ALL relevant vacancies in one query, group by company_id in memory
         result = await self.db.execute(
-            select(distinct(Vacancy.company_id)).where(
+            select(Vacancy).where(
                 Vacancy.search_profile_id == profile_id,
                 Vacancy.extraction_status == "completed",
                 Vacancy.company_id.isnot(None),
+                Vacancy.extracted_data.isnot(None),
             )
         )
-        company_ids = [row[0] for row in result.all()]
+        all_vacancies = list(result.scalars().all())
 
-        for company_id in company_ids:
-            result = await self.db.execute(
-                select(Vacancy).where(
-                    Vacancy.company_id == company_id,
-                    Vacancy.search_profile_id == profile_id,
-                    Vacancy.extraction_status == "completed",
-                    Vacancy.extracted_data.isnot(None),
-                )
+        vacancies_by_company: dict[int, list[Vacancy]] = defaultdict(list)
+        for v in all_vacancies:
+            vacancies_by_company[v.company_id].append(v)
+
+        if not vacancies_by_company:
+            return
+
+        # Load ALL relevant companies in one query
+        company_ids = list(vacancies_by_company.keys())
+        result = await self.db.execute(
+            select(Company).where(Company.id.in_(company_ids))
+        )
+        companies_by_id = {c.id: c for c in result.scalars().all()}
+
+        # Compute scores in memory and update
+        for company_id, vacancies in vacancies_by_company.items():
+            total_quality = sum(
+                compute_extraction_quality(v.extracted_data, prompt.extraction_schema)
+                for v in vacancies
             )
-            vacancies = list(result.scalars().all())
-
-            if not vacancies:
-                continue
-
-            total_quality = 0.0
-            for v in vacancies:
-                total_quality += compute_extraction_quality(
-                    v.extracted_data, prompt.extraction_schema
-                )
             avg_quality = total_quality / len(vacancies)
 
-            result = await self.db.execute(
-                select(Company).where(Company.id == company_id)
-            )
-            company = result.scalar_one_or_none()
+            company = companies_by_id.get(company_id)
             if company:
                 company.extraction_quality = round(avg_quality, 4)
 

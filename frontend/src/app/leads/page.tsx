@@ -446,7 +446,7 @@ export default function LeadBoardPage() {
               </thead>
               <tbody>
                 {filtered.map((lead) => {
-                  const status = statusConfig[lead.status as LeadStatus];
+                  const status = statusConfig[lead.status as LeadStatus] ?? statusConfig.monitor;
                   const enrichmentStatus = lead.company_enrichment_status ?? "unknown";
                   const enrichmentLabel =
                     enrichmentStatus === "completed"

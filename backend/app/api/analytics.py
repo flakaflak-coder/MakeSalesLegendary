@@ -252,48 +252,85 @@ async def term_performance(
     result = await db.execute(
         select(SearchTerm).where(SearchTerm.profile_id == profile_id)
     )
-    terms = result.scalars().all()
+    terms = list(result.scalars().all())
 
     if not terms:
         return {"profile_id": profile_id, "terms": []}
 
-    # For each term, count vacancies whose job_title contains the term,
-    # and compute the average lead score for companies from those vacancies.
+    # Batch query 1: vacancy counts per term using CASE/SUM with GROUP BY
+    # We use conditional aggregation — one query for all terms at once.
+    vacancy_count_cases = [
+        func.sum(
+            case(
+                (func.lower(Vacancy.job_title).contains(func.lower(term.term)), 1),
+                else_=0,
+            )
+        ).label(f"term_{term.id}")
+        for term in terms
+    ]
+    result = await db.execute(
+        select(*vacancy_count_cases).where(
+            Vacancy.search_profile_id == profile_id,
+        )
+    )
+    vacancy_counts_row = result.one()
+    vacancy_counts = {
+        term.id: int(vacancy_counts_row[i] or 0) for i, term in enumerate(terms)
+    }
+
+    # Batch query 2: lead scores per term using conditional aggregation
+    lead_score_cases = []
+    lead_count_cases = []
+    for term in terms:
+        match_condition = func.lower(Vacancy.job_title).contains(func.lower(term.term))
+        lead_score_cases.append(
+            func.avg(
+                case(
+                    (match_condition, Lead.composite_score),
+                    else_=None,
+                )
+            ).label(f"avg_score_{term.id}")
+        )
+        lead_count_cases.append(
+            func.count(
+                case(
+                    (match_condition, Lead.id),
+                    else_=None,
+                )
+            ).label(f"lead_count_{term.id}")
+        )
+
+    result = await db.execute(
+        select(*lead_score_cases, *lead_count_cases)
+        .select_from(Lead)
+        .join(
+            Vacancy,
+            (Vacancy.company_id == Lead.company_id)
+            & (Vacancy.search_profile_id == Lead.search_profile_id),
+        )
+        .where(Lead.search_profile_id == profile_id)
+    )
+    lead_row = result.one()
+    num_terms = len(terms)
+    lead_scores = {
+        term.id: round(float(lead_row[i] or 0), 1) for i, term in enumerate(terms)
+    }
+    lead_counts = {
+        term.id: int(lead_row[num_terms + i] or 0) for i, term in enumerate(terms)
+    }
+
+    # Merge results in Python
     term_stats: list[dict] = []
     for term in terms:
-        # Count vacancies matching this term (case-insensitive partial match)
-        result = await db.execute(
-            select(func.count(Vacancy.id)).where(
-                Vacancy.search_profile_id == profile_id,
-                func.lower(Vacancy.job_title).contains(func.lower(term.term)),
-            )
-        )
-        vacancy_count = result.scalar_one()
-
-        # Average lead score for companies found through vacancies matching this term
-        result = await db.execute(
-            select(func.avg(Lead.composite_score), func.count(Lead.id))
-            .join(
-                Vacancy,
-                (Vacancy.company_id == Lead.company_id)
-                & (Vacancy.search_profile_id == Lead.search_profile_id),
-            )
-            .where(
-                Lead.search_profile_id == profile_id,
-                func.lower(Vacancy.job_title).contains(func.lower(term.term)),
-            )
-        )
-        lead_row = result.one()
-
         term_stats.append(
             {
                 "term_id": term.id,
                 "term": term.term,
                 "language": term.language,
                 "priority": term.priority,
-                "vacancy_count": vacancy_count,
-                "lead_count": lead_row[1] or 0,
-                "avg_lead_score": round(float(lead_row[0] or 0), 1),
+                "vacancy_count": vacancy_counts[term.id],
+                "lead_count": lead_counts[term.id],
+                "avg_lead_score": lead_scores[term.id],
             }
         )
 

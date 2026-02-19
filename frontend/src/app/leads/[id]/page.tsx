@@ -348,7 +348,7 @@ export default function LeadDetailPage({
   );
 
   const profileName = profiles.find((p) => p.id === lead.search_profile_id)?.name;
-  const status = statusConfig[lead.status as LeadStatus];
+  const status = statusConfig[lead.status as LeadStatus] ?? statusConfig.monitor;
 
   function toggleVacancy(vacancyId: number) {
     setExpandedVacancies((prev) => {
@@ -523,12 +523,24 @@ export default function LeadDetailPage({
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-[13px] text-foreground-secondary">
                   <span className="inline-flex items-center gap-1">
                     <MapPin className="h-3.5 w-3.5 text-foreground-faint" />
-                    Unknown city
+                    {(() => {
+                      const apollo = getApolloData(company?.enrichment_data);
+                      const city = apollo ? apolloString(apollo.city) : null;
+                      const country = apollo ? apolloString(apollo.country) : null;
+                      if (city && country) return `${city}, ${country}`;
+                      if (city) return city;
+                      if (country) return country;
+                      return "\u2014";
+                    })()}
                   </span>
                   <span className="text-foreground-faint">{"\u2502"}</span>
                   <span className="inline-flex items-center gap-1">
                     <Building2 className="h-3.5 w-3.5 text-foreground-faint" />
-                    Unknown sector
+                    {(() => {
+                      const apollo = getApolloData(company?.enrichment_data);
+                      const industry = apollo ? apolloString(apollo.industry) : null;
+                      return industry ?? "\u2014";
+                    })()}
                   </span>
                   <span className="text-foreground-faint">{"\u2502"}</span>
                   <span className="inline-flex items-center gap-1">
@@ -970,13 +982,17 @@ export default function LeadDetailPage({
             <div className="flex flex-col gap-2">
               <button
                 type="button"
-                className="flex w-full items-center justify-center gap-2 rounded-md bg-accent px-4 py-2.5 text-[13px] font-medium text-accent-foreground transition-all duration-100 hover:bg-accent-hover active:scale-[0.97]"
+                disabled
+                title="Coming soon"
+                className="flex w-full items-center justify-center gap-2 rounded-md bg-accent px-4 py-2.5 text-[13px] font-medium text-accent-foreground opacity-50 cursor-not-allowed"
               >
                 {"\u{1F525}"} Contact Lead
               </button>
               <button
                 type="button"
-                className="flex w-full items-center justify-center gap-2 rounded-md border border-border px-4 py-2.5 text-[13px] font-medium text-foreground transition-colors hover:bg-background-hover active:bg-background-active"
+                disabled
+                title="Coming soon"
+                className="flex w-full items-center justify-center gap-2 rounded-md border border-border px-4 py-2.5 text-[13px] font-medium text-foreground opacity-50 cursor-not-allowed"
               >
                 {"\u{1F4E7}"} Export Details
               </button>

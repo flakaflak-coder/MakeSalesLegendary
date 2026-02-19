@@ -61,11 +61,15 @@ const TIMING_SIGNAL_LABELS: Record<string, string> = {
   management_vacancy: "Management vacancy",
 };
 
-function classifyStatus(score: number): "hot" | "warm" | "monitor" | "dismissed" {
-  if (score >= 80) return "hot";
-  if (score >= 60) return "warm";
-  if (score >= 40) return "monitor";
-  return "dismissed";
+function classifyStatus(
+  score: number,
+  thresholds?: Record<string, number>
+): "hot" | "warm" | "monitor" {
+  const hot = thresholds?.hot ?? 75;
+  const warm = thresholds?.warm ?? 50;
+  if (score >= hot) return "hot";
+  if (score >= warm) return "warm";
+  return "monitor";
 }
 
 function extractFitWeights(config?: ApiScoringConfig | null): Record<string, number> {
@@ -169,10 +173,10 @@ export default function ScoringTunerPage() {
         ...lead,
         newComposite,
         change,
-        newStatus: classifyStatus(newComposite),
+        newStatus: classifyStatus(newComposite, scoringConfig?.score_thresholds),
       };
     });
-  }, [leads, fitWeight, timingWeight]);
+  }, [leads, fitWeight, timingWeight, scoringConfig?.score_thresholds]);
 
   const sortedLeads = useMemo(() => {
     return [...recalculatedLeads].sort((a, b) => b.newComposite - a.newComposite);

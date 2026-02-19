@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import UTC, datetime
 
@@ -92,12 +93,28 @@ class ExtractionService:
         total_tokens_in = 0
         total_tokens_out = 0
 
-        for vacancy in vacancies:
-            extraction = await self._llm_client.extract_vacancy_data(
-                vacancy_text=vacancy.raw_text,
-                extraction_schema=prompt.extraction_schema,
-                system_prompt=prompt.system_prompt,
-            )
+        semaphore = asyncio.Semaphore(5)
+
+        async def _extract_one(vacancy: Vacancy) -> None:
+            nonlocal succeeded, failed, total_tokens_in, total_tokens_out
+
+            try:
+                async with semaphore:
+                    extraction = await self._llm_client.extract_vacancy_data(
+                        vacancy_text=vacancy.raw_text,
+                        extraction_schema=prompt.extraction_schema,
+                        system_prompt=prompt.system_prompt,
+                    )
+            except Exception as exc:
+                vacancy.extraction_status = "failed"
+                vacancy.extraction_run_id = run.id
+                failed += 1
+                logger.warning(
+                    "LLM extraction raised exception for vacancy %d: %s",
+                    vacancy.id,
+                    exc,
+                )
+                return
 
             run.items_processed += 1
 
@@ -121,6 +138,8 @@ class ExtractionService:
                     vacancy.id,
                     extraction.error,
                 )
+
+        await asyncio.gather(*[_extract_one(v) for v in vacancies])
 
         run.items_succeeded = succeeded
         run.items_failed = failed

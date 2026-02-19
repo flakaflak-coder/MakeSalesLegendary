@@ -10,6 +10,7 @@ from app.integrations.kvk import KvKClient
 from app.models.company import Company
 from app.models.enrichment import EnrichmentRun
 from app.models.vacancy import Vacancy
+from app.utils.ranges import employee_count_to_range
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +136,7 @@ class ExternalEnrichmentService:
                 company.entity_count = kvk_data.entity_count
                 company.kvk_data = kvk_data.raw_data
                 if kvk_data.employee_count and not company.employee_range:
-                    company.employee_range = self._employee_count_to_range(
+                    company.employee_range = employee_count_to_range(
                         kvk_data.employee_count
                     )
 
@@ -151,7 +152,7 @@ class ExternalEnrichmentService:
             apollo_raw = apollo_data.raw_data
             apollo_id = apollo_data.apollo_id
 
-        # Store Apollo raw data in the company_info_data column (repurposed)
+        # Stores Apollo.io enrichment data (originally planned for Company.info)
         company.company_info_data = apollo_raw
 
         # Merge into enrichment_data blob
@@ -160,21 +161,3 @@ class ExternalEnrichmentService:
             "apollo_data": apollo_raw,
             "apollo_id": apollo_id,
         }
-
-    @staticmethod
-    def _employee_count_to_range(count: int) -> str:
-        """Convert a numeric employee count to a range string."""
-        if count < 10:
-            return "1-9"
-        elif count < 50:
-            return "10-49"
-        elif count < 100:
-            return "50-99"
-        elif count < 200:
-            return "100-199"
-        elif count < 500:
-            return "200-499"
-        elif count < 1000:
-            return "500-999"
-        else:
-            return "1000+"

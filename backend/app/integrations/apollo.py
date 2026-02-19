@@ -1,7 +1,10 @@
+import asyncio
 import logging
 from dataclasses import dataclass, field
 
 import httpx
+
+from app.utils.ranges import employee_count_to_range, revenue_to_range
 
 logger = logging.getLogger(__name__)
 
@@ -41,19 +44,80 @@ class ApolloClient:
         self.api_key = api_key
         self.base_url = base_url
 
-    async def _post(self, endpoint: str, payload: dict) -> dict:
+    @staticmethod
+    def _employee_count_to_range(count: int) -> str | None:
+        return employee_count_to_range(count)
+
+    @staticmethod
+    def _revenue_to_range(revenue: int) -> str | None:
+        return revenue_to_range(revenue)
+
+    async def _post(
+        self,
+        endpoint: str,
+        payload: dict,
+        *,
+        max_retries: int = 3,
+        backoff_base: float = 1.0,
+    ) -> dict:
+        """Make an authenticated POST request with retry and exponential backoff.
+
+        Retries on 5xx server errors, connection errors, and timeouts.
+        Backoff schedule: 1s, 2s, 4s (backoff_base * 2^attempt).
+        """
         headers = {
             "x-api-key": self.api_key,
             "Content-Type": "application/json",
         }
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(
-                f"{self.base_url}/{endpoint}",
-                json=payload,
-                headers=headers,
-            )
-            response.raise_for_status()
-            return response.json()
+        url = f"{self.base_url}/{endpoint}"
+        last_exception: Exception | None = None
+
+        for attempt in range(max_retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=30) as client:
+                    response = await client.post(
+                        url,
+                        json=payload,
+                        headers=headers,
+                    )
+                    response.raise_for_status()
+                    return response.json()
+            except httpx.HTTPStatusError as exc:
+                last_exception = exc
+                if exc.response.status_code >= 500 and attempt < max_retries:
+                    wait = backoff_base * (2**attempt)
+                    logger.warning(
+                        "Apollo %s returned %d, retrying in %.1fs (attempt %d/%d)",
+                        endpoint,
+                        exc.response.status_code,
+                        wait,
+                        attempt + 1,
+                        max_retries,
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                raise
+            except (httpx.ConnectError, httpx.TimeoutException) as exc:
+                last_exception = exc
+                if attempt < max_retries:
+                    wait = backoff_base * (2**attempt)
+                    logger.warning(
+                        (
+                            "Apollo %s connection/timeout error, retrying in %.1fs "
+                            "(attempt %d/%d): %s"
+                        ),
+                        endpoint,
+                        wait,
+                        attempt + 1,
+                        max_retries,
+                        exc,
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                raise
+
+        # Should not reach here, but satisfy the type checker
+        raise last_exception  # type: ignore[misc]
 
     async def enrich_company(
         self, *, name: str | None = None, domain: str | None = None
@@ -94,12 +158,12 @@ class ApolloClient:
             domain=org.get("primary_domain"),
             employee_count=employee_count,
             employee_range=(
-                self._employee_count_to_range(employee_count)
+                employee_count_to_range(employee_count)
                 if employee_count
                 else None
             ),
             revenue=revenue,
-            revenue_range=self._revenue_to_range(revenue) if revenue else None,
+            revenue_range=revenue_to_range(revenue) if revenue else None,
             industry=org.get("industry"),
             keywords=org.get("keywords", []),
             founded_year=org.get("founded_year"),
@@ -226,35 +290,3 @@ class ApolloClient:
                 )
             )
         return contacts
-
-    @staticmethod
-    def _employee_count_to_range(count: int) -> str:
-        if count < 10:
-            return "1-9"
-        elif count < 50:
-            return "10-49"
-        elif count < 100:
-            return "50-99"
-        elif count < 200:
-            return "100-199"
-        elif count < 500:
-            return "200-499"
-        elif count < 1000:
-            return "500-999"
-        else:
-            return "1000+"
-
-    @staticmethod
-    def _revenue_to_range(revenue: int) -> str:
-        if revenue < 1_000_000:
-            return "<1M"
-        elif revenue < 10_000_000:
-            return "1M-10M"
-        elif revenue < 50_000_000:
-            return "10M-50M"
-        elif revenue < 100_000_000:
-            return "50M-100M"
-        elif revenue < 500_000_000:
-            return "100M-500M"
-        else:
-            return "500M+"

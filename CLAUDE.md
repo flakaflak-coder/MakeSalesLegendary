@@ -414,3 +414,7 @@ MakeSalesLegendary/
 - Added event logging for harvest/enrichment/scoring triggers and lead status/feedback actions.
 - Exposed enrichment status and extraction quality in lead list/detail to handle partial data gracefully.
 - Added Event Log API and UI page to browse audit events; wired sidebar navigation.
+- Added Apollo client range helper wrappers for test compatibility and wrapped long log lines to satisfy ruff.
+- Cleaned Claude LLM retry loop (removed unused state, shortened prompt construction) to pass ruff.
+- Reordered external enrichment imports and removed an unused scoring page variable to keep lint clean.
+- Re-ran backend tests (151 passing), backend ruff, and frontend eslint with no errors.

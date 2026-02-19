@@ -125,9 +125,12 @@ function FeedbackBanner({
 export default function ProfileDetailPage({
   params,
 }: {
+  // Route param is numeric profile ID (not slug)
+  // TODO: Rename directory from [slug] to [id] to match the actual usage
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = use(params);
+  // Route param is numeric profile ID (not slug)
   const profileId = Number(slug);
 
   // ---- Data state ----
