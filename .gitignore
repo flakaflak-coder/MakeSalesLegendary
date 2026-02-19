@@ -44,3 +44,4 @@ htmlcov/
 
 # Claude Code personal files
 CLAUDE.local.md
+backend/test.db
