@@ -5,21 +5,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import func, select
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.ext.compiler import compiles
 
+from app.integrations.apollo import ApolloCompanyData
 from app.integrations.claude_llm import ExtractionResult
-from app.integrations.company_info import CompanyFinancialData
 from app.integrations.kvk import KvKCompanyData
 from app.models.company import Company
 from app.scrapers.serpapi import SerpApiResult
-
-
-@compiles(JSONB, "sqlite")
-def compile_jsonb_sqlite(type_, compiler, **kw):
-    return "JSON"
-
 
 MOCK_HARVEST_RESULTS = [
     SerpApiResult(
@@ -201,11 +193,13 @@ async def test_full_harvest_to_enrichment_pipeline(
         employee_count=150,
         entity_count=4,
     )
-    mock_ci = CompanyFinancialData(
-        kvk_number="12345678",
+    mock_apollo = ApolloCompanyData(
+        name="TechCorp B.V.",
         employee_count=150,
         employee_range="100-199",
         revenue_range="10M-50M",
+        apollo_id="org_tech123",
+        raw_data={"id": "org_tech123", "name": "TechCorp B.V."},
     )
 
     with (
@@ -222,10 +216,10 @@ async def test_full_harvest_to_enrichment_pipeline(
             return_value=mock_kvk,
         ),
         patch.object(
-            orchestrator._external_service._company_info_client,
-            "get_company_data",
+            orchestrator._external_service._apollo_client,
+            "enrich_company",
             new_callable=AsyncMock,
-            return_value=mock_ci,
+            return_value=mock_apollo,
         ),
     ):
         result = await orchestrator.run_full_enrichment(

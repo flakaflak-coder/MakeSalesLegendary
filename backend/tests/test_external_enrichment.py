@@ -1,20 +1,13 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.compiler import compiles
 
-from app.integrations.company_info import CompanyFinancialData
+from app.integrations.apollo import ApolloCompanyData
 from app.integrations.kvk import KvKCompanyData
 from app.models.company import Company
 from app.models.profile import SearchProfile
 from app.models.vacancy import Vacancy
 from app.services.external_enrichment import ExternalEnrichmentService
-
-
-@compiles(JSONB, "sqlite")
-def compile_jsonb_sqlite(type_, compiler, **kw):
-    return "JSON"
 
 
 @pytest.mark.asyncio
@@ -53,22 +46,24 @@ async def test_enrich_qualifying_companies(db_session):
         employee_count=150,
         entity_count=3,
     )
-    mock_company_info = CompanyFinancialData(
-        kvk_number="12345678",
+    mock_apollo = ApolloCompanyData(
+        name="Acme B.V.",
         employee_count=150,
         employee_range="100-199",
         revenue_range="10M-50M",
+        apollo_id="org_abc123",
+        raw_data={"id": "org_abc123", "name": "Acme B.V."},
     )
 
     service = ExternalEnrichmentService(db=db_session)
 
     with (
         patch.object(service, "_kvk_client", create=True) as mock_kvk_client,
-        patch.object(service, "_company_info_client", create=True) as mock_ci_client,
+        patch.object(service, "_apollo_client", create=True) as mock_apollo_client,
     ):
         mock_kvk_client.find_kvk_number = AsyncMock(return_value="12345678")
         mock_kvk_client.get_company_profile = AsyncMock(return_value=mock_kvk)
-        mock_ci_client.get_company_data = AsyncMock(return_value=mock_company_info)
+        mock_apollo_client.enrich_company = AsyncMock(return_value=mock_apollo)
 
         run = await service.run_external_enrichment(profile_id=profile.id)
 
@@ -184,10 +179,10 @@ async def test_enrich_handles_kvk_failure(db_session):
     service = ExternalEnrichmentService(db=db_session)
     with (
         patch.object(service, "_kvk_client", create=True) as mock_kvk_client,
-        patch.object(service, "_company_info_client", create=True) as mock_ci_client,
+        patch.object(service, "_apollo_client", create=True) as mock_apollo_client,
     ):
         mock_kvk_client.find_kvk_number = AsyncMock(return_value=None)
-        mock_ci_client.get_company_data = AsyncMock(return_value=None)
+        mock_apollo_client.enrich_company = AsyncMock(return_value=None)
 
         run = await service.run_external_enrichment(profile_id=profile.id)
 

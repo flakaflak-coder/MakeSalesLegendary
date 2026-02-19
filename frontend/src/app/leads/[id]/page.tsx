@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, use, useMemo } from "react";
+import { useEffect, useMemo, useState, use } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -15,15 +15,22 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  mockLeads,
-  mockVacancies,
   statusConfig,
   scoreColor,
   scoreBgColor,
   formatDate,
   formatRelativeTime,
+  type LeadStatus,
 } from "@/lib/mock-data";
 import { getRandomGif, getRandomQuote } from "@/lib/sales-gifs";
+import {
+  createLeadFeedback,
+  getLead,
+  getProfiles,
+  updateLeadStatus,
+  type ApiLeadDetail,
+  type ApiProfile,
+} from "@/lib/api";
 
 // ── Feedback action config ──────────────────────────
 
@@ -84,9 +91,17 @@ function vacancyStatusConfig(status: string) {
     case "disappeared":
       return { label: "Disappeared", color: "text-warning", dot: "bg-warning" };
     case "filled":
-      return { label: "Filled", color: "text-foreground-muted", dot: "bg-foreground-muted" };
+      return {
+        label: "Filled",
+        color: "text-foreground-muted",
+        dot: "bg-foreground-muted",
+      };
     default:
-      return { label: status, color: "text-foreground-muted", dot: "bg-foreground-muted" };
+      return {
+        label: status,
+        color: "text-foreground-muted",
+        dot: "bg-foreground-muted",
+      };
   }
 }
 
@@ -108,6 +123,42 @@ function ScoreDots({ score, max }: { score: number; max: number }) {
   );
 }
 
+function toDotScore(score?: number, max: number = 5): number {
+  if (!score) return 0;
+  const normalized = Math.round(score / 20);
+  return Math.min(max, Math.max(0, normalized));
+}
+
+type JsonRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): JsonRecord {
+  if (value && typeof value === "object") {
+    return value as JsonRecord;
+  }
+  return {};
+}
+
+function getScore(breakdown: JsonRecord, key: string): number | undefined {
+  const entry = breakdown[key];
+  if (!entry || typeof entry !== "object") return undefined;
+  const score = (entry as JsonRecord).score;
+  return typeof score === "number" ? score : undefined;
+}
+
+function getValue(breakdown: JsonRecord, key: string): string | undefined {
+  const entry = breakdown[key];
+  if (!entry || typeof entry !== "object") return undefined;
+  const value = (entry as JsonRecord).value;
+  return typeof value === "string" ? value : undefined;
+}
+
+function getPoints(breakdown: JsonRecord, key: string): number | undefined {
+  const entry = breakdown[key];
+  if (!entry || typeof entry !== "object") return undefined;
+  const points = (entry as JsonRecord).points;
+  return typeof points === "number" ? points : undefined;
+}
+
 // ── Page ────────────────────────────────────────────
 
 export default function LeadDetailPage({
@@ -116,20 +167,54 @@ export default function LeadDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const lead = mockLeads.find((l) => l.id === Number(id));
-
+  const [lead, setLead] = useState<ApiLeadDetail | null>(null);
+  const [profiles, setProfiles] = useState<ApiProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [expandedVacancies, setExpandedVacancies] = useState<Set<number>>(
     new Set()
   );
   const [feedbackAction, setFeedbackAction] = useState<string>("");
   const [feedbackNotes, setFeedbackNotes] = useState("");
+  const [feedbackPending, setFeedbackPending] = useState(false);
+  const [dismissPending, setDismissPending] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const [leadRes, profilesRes] = await Promise.all([
+          getLead(Number(id)),
+          getProfiles(),
+        ]);
+        if (cancelled) return;
+        setLead(leadRes);
+        setProfiles(profilesRes);
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Failed to load lead");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    if (id) load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   const gifUrl = useMemo(() => {
     if (!lead) return null;
+    const status = lead.status as LeadStatus;
     const category =
-      lead.status === "hot" || lead.status === "warm"
+      status === "hot" || status === "warm"
         ? "hotLead"
-        : lead.status === "dismissed"
+        : status === "dismissed"
           ? "rejection"
           : "motivation";
     return getRandomGif(category);
@@ -137,14 +222,21 @@ export default function LeadDetailPage({
 
   const quote = useMemo(() => getRandomQuote(), []);
 
-  if (!lead) {
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 py-16 text-center">
+        <p className="text-[13px] text-foreground-muted">Loading lead...</p>
+      </div>
+    );
+  }
+
+  if (error || !lead) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 py-16 text-center">
         <span className="mb-4 text-4xl">{"\u{1F50D}"}</span>
         <h1 className="text-xl font-bold text-foreground">Lead not found</h1>
         <p className="mt-2 text-sm text-foreground-muted">
-          No lead with ID &ldquo;{id}&rdquo; exists. It may have been removed or
-          the URL is incorrect.
+          {error ?? `No lead with ID "${id}" exists.`}
         </p>
         <Link
           href="/leads"
@@ -157,9 +249,46 @@ export default function LeadDetailPage({
     );
   }
 
-  const { company } = lead;
-  const status = statusConfig[lead.status];
-  const vacancies = mockVacancies[lead.id] ?? [];
+  const scoring = asRecord(lead.scoring_breakdown);
+  const fit = asRecord(scoring.fit);
+  const timing = asRecord(scoring.timing);
+  const fitBreakdown = asRecord(fit.breakdown);
+  const timingBreakdown = asRecord(timing.breakdown);
+  const company = lead.company;
+
+  const vacancies = lead.vacancies.map((vacancy) => {
+    const extracted = asRecord(vacancy.extracted_data);
+    return {
+      id: vacancy.id,
+      title: vacancy.job_title,
+      source: vacancy.source,
+      firstSeenAt: vacancy.first_seen_at ?? "",
+      lastSeenAt: vacancy.last_seen_at ?? "",
+      status: vacancy.status,
+      extractedData: {
+        erpSystems: Array.isArray(extracted.erp_systems)
+          ? (extracted.erp_systems as string[])
+          : [],
+        teamSize:
+          typeof extracted.team_size === "string" ? extracted.team_size : null,
+        volumeIndicators:
+          typeof extracted.volume_indicators === "string"
+            ? extracted.volume_indicators
+            : null,
+        automationStatus:
+          typeof extracted.automation_status === "string"
+            ? extracted.automation_status
+            : null,
+      },
+    };
+  });
+
+  const platforms = Array.from(
+    new Set(lead.vacancies.map((v) => v.source))
+  );
+
+  const profileName = profiles.find((p) => p.id === lead.search_profile_id)?.name;
+  const status = statusConfig[lead.status as LeadStatus];
 
   function toggleVacancy(vacancyId: number) {
     setExpandedVacancies((prev) => {
@@ -173,70 +302,110 @@ export default function LeadDetailPage({
     });
   }
 
-  // Fit breakdown criteria labels and keys
   const fitCriteria = [
     {
-      key: "invoiceVolume" as const,
-      label: "Invoice Volume",
-      value: null,
-    },
-    {
-      key: "entityCount" as const,
+      key: "entity_count",
       label: "Entity Count",
-      value: `${company.entityCount} entities`,
+      value:
+        company?.entity_count != null
+          ? `${company.entity_count} entities`
+          : "Unknown",
+      score: getScore(fitBreakdown, "entity_count"),
     },
     {
-      key: "employeeCount" as const,
+      key: "employee_count",
       label: "Employee Count",
-      value: company.employeeRange,
+      value: company?.employee_range ?? "Unknown",
+      score: getScore(fitBreakdown, "employee_count"),
     },
     {
-      key: "erpCompatibility" as const,
+      key: "erp_compatibility",
       label: "ERP Compatibility",
-      value: lead.scoringBreakdown.erpCompatibility.erp,
+      value: getValue(fitBreakdown, "erp_compatibility") ?? "Unknown",
+      score: getScore(fitBreakdown, "erp_compatibility"),
     },
     {
-      key: "noExistingP2P" as const,
-      label: "No Existing P2P",
-      value: null,
+      key: "no_existing_automation",
+      label: "No Existing Automation",
+      value: getValue(fitBreakdown, "no_existing_automation") ?? "Unknown",
+      score: getScore(fitBreakdown, "no_existing_automation"),
     },
     {
-      key: "sectorFit" as const,
+      key: "sector_fit",
       label: "Sector Fit",
-      value: company.sector,
+      value: getValue(fitBreakdown, "sector_fit") ?? "Unknown",
+      score: getScore(fitBreakdown, "sector_fit"),
     },
     {
-      key: "multiLanguage" as const,
+      key: "multi_language",
       label: "Multi-Language",
-      value: null,
+      value: getValue(fitBreakdown, "multi_language") ?? "Unknown",
+      score: getScore(fitBreakdown, "multi_language"),
+    },
+    {
+      key: "revenue",
+      label: "Revenue Range",
+      value: company?.revenue_range ?? "Unknown",
+      score: getScore(fitBreakdown, "revenue"),
     },
   ];
 
-  // Timing signals
   const timingSignals = [
     {
       label: "Vacancy Age >60d",
-      points: lead.timingBreakdown.vacancyAge,
+      points: getPoints(timingBreakdown, "vacancy_age_over_60_days") ?? 0,
     },
     {
       label: "Multiple Vacancies",
-      points: lead.timingBreakdown.multipleVacancies,
+      points: getPoints(timingBreakdown, "multiple_vacancies_same_role") ?? 0,
     },
     {
       label: "Repeated Publication",
-      points: lead.timingBreakdown.repeatedPublication,
+      points: getPoints(timingBreakdown, "repeated_publication") ?? 0,
     },
     {
-      label: "Related Vacancies",
-      points: lead.timingBreakdown.relatedVacancies,
+      label: "Multi-Platform",
+      points: getPoints(timingBreakdown, "multi_platform") ?? 0,
     },
     {
       label: "Management Vacancy",
-      points: lead.timingBreakdown.managementVacancy,
+      points: getPoints(timingBreakdown, "management_vacancy") ?? 0,
     },
   ];
 
   const activeTimingSignals = timingSignals.filter((s) => s.points > 0);
+
+  async function handleSubmitFeedback() {
+    if (!feedbackAction) return;
+    setFeedbackPending(true);
+    try {
+      await createLeadFeedback(lead.id, {
+        action: feedbackAction,
+        notes: feedbackNotes || undefined,
+      });
+      const updated = await getLead(lead.id);
+      setLead(updated);
+      setFeedbackAction("");
+      setFeedbackNotes("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to submit feedback");
+    } finally {
+      setFeedbackPending(false);
+    }
+  }
+
+  async function handleDismissLead() {
+    setDismissPending(true);
+    try {
+      await updateLeadStatus(lead.id, "dismissed");
+      const updated = await getLead(lead.id);
+      setLead(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to dismiss lead");
+    } finally {
+      setDismissPending(false);
+    }
+  }
 
   return (
     <div className="px-6 py-6">
@@ -248,6 +417,12 @@ export default function LeadDetailPage({
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to Lead Board
       </Link>
+
+      {error && (
+        <div className="mb-4 rounded-md border border-danger/20 bg-danger/10 px-4 py-3 text-[13px] text-danger">
+          {error}
+        </div>
+      )}
 
       {/* ── Two-column layout ─────────────────────── */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -272,29 +447,29 @@ export default function LeadDetailPage({
 
                 {/* Company name */}
                 <h1 className="mt-2 text-xl font-bold tracking-tight text-foreground">
-                  {company.name}
+                  {company?.name ?? "Unknown company"}
                 </h1>
 
                 {/* Metadata row */}
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-[13px] text-foreground-secondary">
                   <span className="inline-flex items-center gap-1">
                     <MapPin className="h-3.5 w-3.5 text-foreground-faint" />
-                    {company.city}
+                    Unknown city
                   </span>
                   <span className="text-foreground-faint">{"\u2502"}</span>
                   <span className="inline-flex items-center gap-1">
                     <Building2 className="h-3.5 w-3.5 text-foreground-faint" />
-                    {company.sector}
+                    Unknown sector
                   </span>
                   <span className="text-foreground-faint">{"\u2502"}</span>
                   <span className="inline-flex items-center gap-1">
                     <Users className="h-3.5 w-3.5 text-foreground-faint" />
-                    {company.employeeRange}
+                    {company?.employee_range ?? "Unknown"}
                   </span>
                   <span className="text-foreground-faint">{"\u2502"}</span>
                   <span className="inline-flex items-center gap-1">
                     <TrendingUp className="h-3.5 w-3.5 text-foreground-faint" />
-                    {company.revenueRange}
+                    {company?.revenue_range ?? "Unknown"}
                   </span>
                 </div>
               </div>
@@ -304,9 +479,9 @@ export default function LeadDetailPage({
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1 rounded border border-border-subtle bg-sand-50 px-2 py-0.5 font-mono text-[11px] text-foreground-muted">
                 <Hash className="h-3 w-3" />
-                KvK {company.kvkNumber}
+                KvK {company?.kvk_number ?? "Unknown"}
               </span>
-              {company.sbiCodes.map((code) => (
+              {(company?.sbi_codes ?? []).map((code) => (
                 <span
                   key={code}
                   className="rounded border border-border-subtle bg-sand-50 px-2 py-0.5 font-mono text-[11px] text-foreground-muted"
@@ -316,13 +491,13 @@ export default function LeadDetailPage({
               ))}
               <span className="inline-flex items-center gap-1 rounded border border-border-subtle bg-sand-50 px-2 py-0.5 text-[11px] text-foreground-muted">
                 <Globe className="h-3 w-3" />
-                {company.entityCount} entities
+                {company?.entity_count ?? 0} entities
               </span>
             </div>
 
             {/* Enriched timestamp */}
             <p className="mt-3 text-[11px] text-foreground-faint">
-              Last enriched {formatRelativeTime(company.enrichedAt)}
+              Last scored {formatRelativeTime(lead.scored_at || lead.created_at)}
             </p>
           </div>
 
@@ -341,19 +516,19 @@ export default function LeadDetailPage({
                 <span
                   className={cn(
                     "text-2xl font-bold tabular-nums",
-                    scoreColor(lead.compositeScore)
+                    scoreColor(lead.composite_score)
                   )}
                 >
-                  {lead.compositeScore}
+                  {lead.composite_score}
                 </span>
               </div>
               <div className="h-2.5 overflow-hidden rounded-full bg-sand-200">
                 <div
                   className={cn(
                     "h-full rounded-full transition-all duration-500 ease-out",
-                    scoreBgColor(lead.compositeScore)
+                    scoreBgColor(lead.composite_score)
                   )}
-                  style={{ width: `${lead.compositeScore}%` }}
+                  style={{ width: `${lead.composite_score}%` }}
                 />
               </div>
             </div>
@@ -369,34 +544,31 @@ export default function LeadDetailPage({
                   <span
                     className={cn(
                       "text-[15px] font-bold tabular-nums",
-                      scoreColor(lead.fitScore)
+                      scoreColor(lead.fit_score)
                     )}
                   >
-                    {lead.fitScore}/100
+                    {lead.fit_score}/100
                   </span>
                 </div>
                 <div className="space-y-2.5">
-                  {fitCriteria.map((criterion) => {
-                    const breakdown = lead.scoringBreakdown[criterion.key];
-                    return (
-                      <div key={criterion.key} className="flex items-center justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <span className="text-[12px] text-foreground-secondary">
-                            {criterion.label}
+                  {fitCriteria.map((criterion) => (
+                    <div
+                      key={criterion.key}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[12px] text-foreground-secondary">
+                          {criterion.label}
+                        </span>
+                        {criterion.value && (
+                          <span className="ml-1.5 text-[11px] text-foreground-faint">
+                            ({criterion.value})
                           </span>
-                          {criterion.value && (
-                            <span className="ml-1.5 text-[11px] text-foreground-faint">
-                              ({criterion.value})
-                            </span>
-                          )}
-                        </div>
-                        <ScoreDots
-                          score={breakdown.score}
-                          max={breakdown.max}
-                        />
+                        )}
                       </div>
-                    );
-                  })}
+                      <ScoreDots score={toDotScore(criterion.score)} max={5} />
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -409,10 +581,10 @@ export default function LeadDetailPage({
                   <span
                     className={cn(
                       "text-[15px] font-bold tabular-nums",
-                      scoreColor(lead.timingScore)
+                      scoreColor(lead.timing_score)
                     )}
                   >
-                    {lead.timingScore}/100
+                    {lead.timing_score}/100
                   </span>
                 </div>
                 {activeTimingSignals.length > 0 ? (
@@ -591,7 +763,9 @@ export default function LeadDetailPage({
               <div className="mb-6 space-y-3">
                 {lead.feedback.map((entry) => {
                   const actionConfig =
-                    feedbackActionConfig[entry.action];
+                    feedbackActionConfig[
+                      entry.action as keyof typeof feedbackActionConfig
+                    ];
                   return (
                     <div
                       key={entry.id}
@@ -599,7 +773,7 @@ export default function LeadDetailPage({
                     >
                       {/* Timeline dot */}
                       <div className="mt-0.5 flex flex-col items-center">
-                        <span className="text-sm">{actionConfig.emoji}</span>
+                        <span className="text-sm">{actionConfig?.emoji ?? "\u2022"}</span>
                       </div>
 
                       <div className="flex-1">
@@ -607,15 +781,15 @@ export default function LeadDetailPage({
                           <span
                             className={cn(
                               "rounded-full border px-2 py-0.5 text-[11px] font-medium",
-                              actionConfig.bg,
-                              actionConfig.color,
-                              actionConfig.border
+                              actionConfig?.bg ?? "bg-sand-100",
+                              actionConfig?.color ?? "text-foreground-muted",
+                              actionConfig?.border ?? "border-border"
                             )}
                           >
-                            {actionConfig.label}
+                            {actionConfig?.label ?? entry.action}
                           </span>
                           <span className="text-[11px] text-foreground-faint">
-                            {formatDate(entry.createdAt)}
+                            {formatDate(entry.created_at ?? "")}
                           </span>
                         </div>
                         {entry.notes && (
@@ -667,18 +841,10 @@ export default function LeadDetailPage({
                     className="w-full appearance-none rounded-md border border-border bg-background-card px-3 py-2 pr-8 text-[13px] text-foreground transition-colors focus:border-accent focus:outline-none"
                   >
                     <option value="">Select action...</option>
-                    <option value="contacted">
-                      {"\u{1F4DE}"} Contacted
-                    </option>
-                    <option value="meeting">
-                      {"\u{1F91D}"} Meeting
-                    </option>
-                    <option value="converted">
-                      {"\u{1F389}"} Converted
-                    </option>
-                    <option value="rejected">
-                      {"\u{274C}"} Rejected
-                    </option>
+                    <option value="contacted">{"\u{1F4DE}"} Contacted</option>
+                    <option value="meeting">{"\u{1F91D}"} Meeting</option>
+                    <option value="converted">{"\u{1F389}"} Converted</option>
+                    <option value="rejected">{"\u{274C}"} Rejected</option>
                   </select>
                   <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground-faint" />
                 </div>
@@ -692,10 +858,16 @@ export default function LeadDetailPage({
                 />
                 <button
                   type="button"
-                  className="inline-flex w-fit items-center gap-1.5 rounded-md bg-accent px-4 py-2 text-[13px] font-medium text-accent-foreground transition-all duration-100 hover:bg-accent-hover active:scale-[0.97]"
+                  onClick={handleSubmitFeedback}
+                  disabled={feedbackPending || !feedbackAction}
+                  className={cn(
+                    "inline-flex w-fit items-center gap-1.5 rounded-md bg-accent px-4 py-2 text-[13px] font-medium text-accent-foreground transition-all duration-100 hover:bg-accent-hover active:scale-[0.97]",
+                    (feedbackPending || !feedbackAction) &&
+                      "cursor-not-allowed opacity-70"
+                  )}
                 >
                   <Send className="h-3.5 w-3.5" />
-                  Submit Feedback
+                  {feedbackPending ? "Submitting..." : "Submit Feedback"}
                 </button>
               </div>
             </div>
@@ -724,9 +896,14 @@ export default function LeadDetailPage({
               </button>
               <button
                 type="button"
-                className="flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-[13px] font-medium text-danger transition-colors hover:bg-danger/5 active:bg-danger/10"
+                onClick={handleDismissLead}
+                disabled={dismissPending}
+                className={cn(
+                  "flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-[13px] font-medium text-danger transition-colors hover:bg-danger/5 active:bg-danger/10",
+                  dismissPending && "cursor-not-allowed opacity-70"
+                )}
               >
-                {"\u{1F44B}"} Dismiss Lead
+                {"\u{1F44B}"} {dismissPending ? "Dismissing..." : "Dismiss Lead"}
               </button>
             </div>
           </div>
@@ -741,10 +918,10 @@ export default function LeadDetailPage({
                 <span
                   className={cn(
                     "block text-2xl font-bold tabular-nums",
-                    scoreColor(lead.compositeScore)
+                    scoreColor(lead.composite_score)
                   )}
                 >
-                  {lead.compositeScore}
+                  {lead.composite_score}
                 </span>
                 <span className="text-[10px] font-medium uppercase tracking-[0.06em] text-foreground-muted">
                   Composite
@@ -754,10 +931,10 @@ export default function LeadDetailPage({
                 <span
                   className={cn(
                     "block text-2xl font-bold tabular-nums",
-                    scoreColor(lead.fitScore)
+                    scoreColor(lead.fit_score)
                   )}
                 >
-                  {lead.fitScore}
+                  {lead.fit_score}
                 </span>
                 <span className="text-[10px] font-medium uppercase tracking-[0.06em] text-foreground-muted">
                   Fit
@@ -767,10 +944,10 @@ export default function LeadDetailPage({
                 <span
                   className={cn(
                     "block text-2xl font-bold tabular-nums",
-                    scoreColor(lead.timingScore)
+                    scoreColor(lead.timing_score)
                   )}
                 >
-                  {lead.timingScore}
+                  {lead.timing_score}
                 </span>
                 <span className="text-[10px] font-medium uppercase tracking-[0.06em] text-foreground-muted">
                   Timing
@@ -790,7 +967,7 @@ export default function LeadDetailPage({
                   Vacancies
                 </span>
                 <span className="text-[13px] font-semibold tabular-nums text-foreground">
-                  {lead.vacancyCount}
+                  {lead.vacancy_count}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -800,12 +977,12 @@ export default function LeadDetailPage({
                 <span
                   className={cn(
                     "text-[13px] font-semibold tabular-nums",
-                    lead.oldestVacancyDays > 60
+                    lead.oldest_vacancy_days > 60
                       ? "text-signal-hot"
                       : "text-foreground"
                   )}
                 >
-                  {lead.oldestVacancyDays} days
+                  {lead.oldest_vacancy_days} days
                 </span>
               </div>
               <div className="flex items-start justify-between gap-2">
@@ -813,14 +990,20 @@ export default function LeadDetailPage({
                   Platforms
                 </span>
                 <div className="flex flex-wrap justify-end gap-1">
-                  {lead.platforms.map((platform) => (
-                    <span
-                      key={platform}
-                      className="rounded border border-border-subtle bg-sand-50 px-1.5 py-0.5 text-[10px] font-medium text-foreground-muted"
-                    >
-                      {platform}
+                  {platforms.length > 0 ? (
+                    platforms.map((platform) => (
+                      <span
+                        key={platform}
+                        className="rounded border border-border-subtle bg-sand-50 px-1.5 py-0.5 text-[10px] font-medium text-foreground-muted"
+                      >
+                        {platform}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-[11px] text-foreground-faint">
+                      No sources yet
                     </span>
-                  ))}
+                  )}
                 </div>
               </div>
               <div className="flex items-center justify-between">
@@ -828,7 +1011,7 @@ export default function LeadDetailPage({
                   Profile
                 </span>
                 <span className="rounded border border-accent-border bg-accent-subtle px-2 py-0.5 text-[11px] font-medium text-accent">
-                  Accounts Payable
+                  {profileName ?? `Profile ${lead.search_profile_id}`}
                 </span>
               </div>
             </div>

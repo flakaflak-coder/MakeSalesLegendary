@@ -394,3 +394,19 @@ MakeSalesLegendary/
 - **Scores are never magic.** Every score must have a human-readable breakdown showing exactly why this company scored what it did.
 - **Fail gracefully.** External APIs go down. Scrapers break. The system must continue working with partial data and flag what's missing.
 - **Vacancy text is gold.** The LLM extraction from vacancy text is our competitive advantage. Invest in prompt quality and validation here.
+
+---
+
+## Change Log
+
+### 2026-02-19
+
+- Wired the frontend dashboard and lead board to live API data (leads, stats, funnel, harvest runs, profiles) and added loading/error states for UX validation.
+- Integrated lead detail page with API-backed scoring breakdowns, vacancies, and feedback, plus feedback submission and dismiss actions.
+- Added a shared frontend API client (`frontend/src/lib/api.ts`) to centralize all backend calls.
+- Expanded harvest run API response to include `started_at`/`completed_at` for UI timestamps.
+- Confirmed backend routers are mounted for leads, analytics, scoring, and harvest to support integration testing.
+- Wired analytics, harvest monitor, profiles, profile detail, and scoring tuner pages to live API data with real loading/error states and derived metrics.
+- Added analytics integrations for funnel, term performance, scoring accuracy, and harvest summaries, plus scoring config updates and on-demand scoring runs.
+- Ran backend ruff and pytest; fixed Apollo enrichment behavior, default minimum filters, and import ordering to get a clean test run.
+- Fixed frontend lint errors (unused imports and explicit any types) and re-ran eslint cleanly.

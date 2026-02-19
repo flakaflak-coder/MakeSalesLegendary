@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -26,6 +27,8 @@ class HarvestRunResponse(BaseModel):
     profile_id: int
     source: str
     status: str
+    started_at: datetime | None
+    completed_at: datetime | None
     vacancies_found: int
     vacancies_new: int
     error_message: str | None

@@ -11,7 +11,7 @@ class Vacancy(Base):
     __tablename__ = "vacancies"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    external_id: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     source: Mapped[str] = mapped_column(String(50))
     search_profile_id: Mapped[int] = mapped_column(
         ForeignKey("search_profiles.id", ondelete="CASCADE")

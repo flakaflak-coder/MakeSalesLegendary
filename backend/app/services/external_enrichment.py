@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.integrations.company_info import CompanyInfoClient
+from app.integrations.apollo import ApolloClient
 from app.integrations.kvk import KvKClient
 from app.models.company import Company
 from app.models.enrichment import EnrichmentRun
@@ -23,9 +23,9 @@ class ExternalEnrichmentService:
             api_key=settings.kvk_api_key,
             base_url=settings.kvk_api_base_url,
         )
-        self._company_info_client = CompanyInfoClient(
-            api_key=settings.company_info_api_key,
-            base_url=settings.company_info_api_base_url,
+        self._apollo_client = ApolloClient(
+            api_key=settings.apollo_api_key,
+            base_url=settings.apollo_api_base_url,
         )
 
     async def run_external_enrichment(self, profile_id: int) -> EnrichmentRun:
@@ -115,7 +115,7 @@ class ExternalEnrichmentService:
         return run
 
     async def _enrich_company(self, company: Company) -> None:
-        """Enrich a single company with KvK and Company.info data."""
+        """Enrich a single company with KvK and Apollo.io data."""
         # Step 1: Find KvK number if we don't have it
         if not company.kvk_number:
             kvk_number = await self._kvk_client.find_kvk_number(company.name)
@@ -139,22 +139,26 @@ class ExternalEnrichmentService:
                         kvk_data.employee_count
                     )
 
-        # Step 3: Get Company.info financial data
-        if company.kvk_number:
-            ci_data = await self._company_info_client.get_company_data(
-                company.kvk_number
-            )
-            if ci_data:
-                if ci_data.employee_range:
-                    company.employee_range = ci_data.employee_range
-                if ci_data.revenue_range:
-                    company.revenue_range = ci_data.revenue_range
-                company.company_info_data = ci_data.raw_data
+        # Step 3: Apollo.io enrichment (employee count, revenue, industry)
+        apollo_data = await self._apollo_client.enrich_company(name=company.name)
+        apollo_raw: dict = {}
+        apollo_id: str | None = None
+        if apollo_data:
+            if apollo_data.employee_range:
+                company.employee_range = apollo_data.employee_range
+            if apollo_data.revenue_range:
+                company.revenue_range = apollo_data.revenue_range
+            apollo_raw = apollo_data.raw_data
+            apollo_id = apollo_data.apollo_id
 
-        # Merge into enrichment_data blob for backward compatibility
+        # Store Apollo raw data in the company_info_data column (repurposed)
+        company.company_info_data = apollo_raw
+
+        # Merge into enrichment_data blob
         company.enrichment_data = {
             "kvk_data": company.kvk_data,
-            "company_info_data": company.company_info_data,
+            "apollo_data": apollo_raw,
+            "apollo_id": apollo_id,
         }
 
     @staticmethod

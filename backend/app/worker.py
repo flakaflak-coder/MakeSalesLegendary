@@ -20,6 +20,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.worker.enrich_all_profiles",
         "schedule": crontab(hour=8, minute=0, day_of_week=1),  # Monday 8 AM
     },
+    "score-all-profiles-daily": {
+        "task": "app.worker.score_all_profiles",
+        "schedule": crontab(hour=10, minute=0),
+    },
 }
 celery_app.conf.timezone = "Europe/Amsterdam"
 
@@ -51,6 +55,18 @@ def trigger_enrichment_task(profile_id: int, pass_type: str = "both") -> None:
 def enrich_all_profiles() -> None:
     """Celery task to run enrichment for all profiles."""
     asyncio.run(_run_all_enrichments())
+
+
+@celery_app.task(name="app.worker.trigger_scoring")
+def trigger_scoring_task(profile_id: int) -> None:
+    """Celery task to trigger scoring for a profile."""
+    asyncio.run(_run_scoring(profile_id))
+
+
+@celery_app.task(name="app.worker.score_all_profiles")
+def score_all_profiles() -> None:
+    """Celery task to score all profiles."""
+    asyncio.run(_run_all_scoring())
 
 
 async def _run_harvest(profile_id: int, source: str) -> None:
@@ -110,6 +126,10 @@ async def _run_enrichment(profile_id: int, pass_type: str) -> None:
                 run.items_processed if hasattr(run, "items_processed") else 0,
             )
 
+        # Auto-trigger scoring after enrichment
+        logger.info("Auto-triggering scoring for profile %d", profile_id)
+        trigger_scoring_task.delay(profile_id)
+
 
 async def _run_all_enrichments() -> None:
     from sqlalchemy import select
@@ -125,3 +145,35 @@ async def _run_all_enrichments() -> None:
                 await _run_enrichment(profile.id, "both")
             except Exception as exc:
                 logger.error("Enrichment failed for profile %d: %s", profile.id, exc)
+
+
+async def _run_scoring(profile_id: int) -> None:
+    from app.services.scoring import ScoringService
+
+    session_factory = _get_async_session()
+    async with session_factory() as db:
+        service = ScoringService(db=db)
+        stats = await service.score_profile(profile_id)
+        logger.info(
+            "Scoring for profile %d completed: %d scored, %d hot, %d warm",
+            profile_id,
+            stats["scored"],
+            stats["hot"],
+            stats["warm"],
+        )
+
+
+async def _run_all_scoring() -> None:
+    from sqlalchemy import select
+
+    from app.models.profile import SearchProfile
+
+    session_factory = _get_async_session()
+    async with session_factory() as db:
+        result = await db.execute(select(SearchProfile))
+        profiles = result.scalars().all()
+        for profile in profiles:
+            try:
+                await _run_scoring(profile.id)
+            except Exception as exc:
+                logger.error("Scoring failed for profile %d: %s", profile.id, exc)

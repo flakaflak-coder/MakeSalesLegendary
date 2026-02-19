@@ -1,10 +1,20 @@
 "use client";
 
-import { use } from "react";
+import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { ArrowLeft, Save } from "lucide-react";
-import { mockProfiles, formatRelativeTime } from "@/lib/mock-data";
+import { formatRelativeTime } from "@/lib/mock-data";
 import { notFound } from "next/navigation";
+import {
+  getHarvestRuns,
+  getLeads,
+  getProfiles,
+  getScoringConfig,
+  type ApiHarvestRun,
+  type ApiLeadListItem,
+  type ApiProfile,
+  type ApiScoringConfig,
+} from "@/lib/api";
 
 export default function ProfileDetailPage({
   params,
@@ -12,11 +22,65 @@ export default function ProfileDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = use(params);
-  const profile = mockProfiles.find((p) => p.slug === slug);
+  const [profiles, setProfiles] = useState<ApiProfile[]>([]);
+  const [leads, setLeads] = useState<ApiLeadListItem[]>([]);
+  const [runs, setRuns] = useState<ApiHarvestRun[]>([]);
+  const [scoringConfig, setScoringConfig] = useState<ApiScoringConfig | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!profile) {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const [profilesRes, leadsRes, runsRes] = await Promise.all([
+          getProfiles(),
+          getLeads({ limit: 500 }),
+          getHarvestRuns(),
+        ]);
+        if (cancelled) return;
+        setProfiles(profilesRes);
+        setLeads(leadsRes);
+        setRuns(runsRes);
+
+        const profile = profilesRes.find((p) => p.slug === slug);
+        if (profile) {
+          try {
+            const cfg = await getScoringConfig(profile.id);
+            if (!cancelled) setScoringConfig(cfg);
+          } catch {
+            if (!cancelled) setScoringConfig(null);
+          }
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Failed to load profile");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
+
+  const profile = profiles.find((p) => p.slug === slug);
+
+  if (!loading && !profile) {
     notFound();
   }
+
+  const profileLeads = leads.filter((l) => l.search_profile_id === profile?.id);
+  const activeLeads = profileLeads.length;
+  const hotLeads = profileLeads.filter((l) => l.status === "hot").length;
+  const searchTermCount = profile?.search_terms.length ?? 0;
+  const lastRun = runs.find((r) => r.profile_id === profile?.id);
 
   return (
     <div className="px-6 py-6">
@@ -31,7 +95,7 @@ export default function ProfileDetailPage({
       <div className="mb-8 flex items-start justify-between">
         <div>
           <h1 className="text-[1.75rem] font-bold tracking-tight text-foreground">
-            {"\u2699\uFE0F"} {profile.name}
+            {"\u2699\uFE0F"} {profile?.name ?? "Profile"}
           </h1>
           <p className="mt-1 max-w-lg text-[15px] leading-relaxed text-foreground-secondary">
             Configure search terms, scoring weights, and extraction prompts for
@@ -43,6 +107,12 @@ export default function ProfileDetailPage({
           Save Changes
         </button>
       </div>
+
+      {error && (
+        <div className="mb-6 rounded-md border border-danger/20 bg-danger/10 px-4 py-3 text-[13px] text-danger">
+          {error}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Search Terms */}
@@ -58,10 +128,9 @@ export default function ProfileDetailPage({
               <p className="text-[13px] text-foreground-secondary">
                 This profile has{" "}
                 <span className="font-semibold text-foreground">
-                  {profile.searchTermCount}
+                  {searchTermCount}
                 </span>{" "}
-                search terms configured across primary, secondary, and seniority
-                signal categories.
+                search terms configured.
               </p>
               <p className="mt-2 text-[12px] text-foreground-muted">
                 Edit terms in the YAML config or via the API to add new keywords
@@ -82,7 +151,7 @@ export default function ProfileDetailPage({
                 Fit Weight
               </span>
               <span className="text-[13px] font-semibold tabular-nums text-foreground">
-                {profile.fitWeight}
+                {scoringConfig?.fit_weight?.toFixed(2) ?? "--"}
               </span>
             </div>
             <div className="flex items-center justify-between">
@@ -90,13 +159,13 @@ export default function ProfileDetailPage({
                 Timing Weight
               </span>
               <span className="text-[13px] font-semibold tabular-nums text-foreground">
-                {profile.timingWeight}
+                {scoringConfig?.timing_weight?.toFixed(2) ?? "--"}
               </span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-sand-200">
               <div
                 className="h-full rounded-full bg-accent"
-                style={{ width: `${profile.fitWeight * 100}%` }}
+                style={{ width: `${(scoringConfig?.fit_weight ?? 0.6) * 100}%` }}
               />
             </div>
             <p className="text-[11px] text-foreground-muted">
@@ -120,23 +189,23 @@ export default function ProfileDetailPage({
             {[
               {
                 label: "Active Leads",
-                value: profile.activeLeads,
+                value: activeLeads,
                 emoji: "\uD83C\uDFAF",
               },
               {
                 label: "Hot Leads",
-                value: profile.hotLeads,
+                value: hotLeads,
                 emoji: "\uD83D\uDD25",
               },
               {
                 label: "Search Terms",
-                value: profile.searchTermCount,
+                value: searchTermCount,
                 emoji: "\uD83D\uDD0D",
               },
               {
                 label: "Last Harvest",
-                value: profile.lastHarvestAt
-                  ? formatRelativeTime(profile.lastHarvestAt)
+                value: lastRun?.completed_at
+                  ? formatRelativeTime(lastRun.completed_at)
                   : "Never",
                 emoji: "\uD83D\uDE9C",
               },

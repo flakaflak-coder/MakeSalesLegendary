@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import {
   Target,
@@ -14,22 +14,133 @@ import {
 import { StatCard } from "@/components/stat-card";
 import { cn } from "@/lib/utils";
 import {
-  mockLeads,
-  mockHarvestRuns,
-  mockProfiles,
-  mockAnalytics,
   statusConfig,
   scoreBgColor,
   formatRelativeTime,
 } from "@/lib/mock-data";
 import { salesGifs, getRandomQuote } from "@/lib/sales-gifs";
+import {
+  getAnalyticsFunnel,
+  getAnalyticsOverview,
+  getHarvestRuns,
+  getLeadStats,
+  getLeads,
+  getProfiles,
+  type ApiAnalyticsFunnel,
+  type ApiAnalyticsOverview,
+  type ApiHarvestRun,
+  type ApiLeadListItem,
+  type ApiLeadStats,
+  type ApiProfile,
+} from "@/lib/api";
 
 export default function DashboardPage() {
   const quote = useMemo(() => getRandomQuote(), []);
-  const hotLeads = mockLeads.filter((l) => l.status === "hot");
-  const warmLeads = mockLeads.filter((l) => l.status === "warm");
-  const lastHarvest = mockHarvestRuns[0];
-  const funnel = mockAnalytics.conversionFunnel;
+
+  const [leads, setLeads] = useState<ApiLeadListItem[]>([]);
+  const [leadStats, setLeadStats] = useState<ApiLeadStats | null>(null);
+  const [funnel, setFunnel] = useState<ApiAnalyticsFunnel | null>(null);
+  const [overview, setOverview] = useState<ApiAnalyticsOverview | null>(null);
+  const [harvestRuns, setHarvestRuns] = useState<ApiHarvestRun[]>([]);
+  const [profiles, setProfiles] = useState<ApiProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const [leadList, stats, funnelRes, overviewRes, runs, profilesRes] =
+          await Promise.all([
+            getLeads({ limit: 200, sortBy: "composite_score", sortOrder: "desc" }),
+            getLeadStats(),
+            getAnalyticsFunnel(),
+            getAnalyticsOverview(),
+            getHarvestRuns(),
+            getProfiles(),
+          ]);
+
+        if (cancelled) return;
+        setLeads(leadList);
+        setLeadStats(stats);
+        setFunnel(funnelRes);
+        setOverview(overviewRes);
+        setHarvestRuns(runs);
+        setProfiles(profilesRes);
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Failed to load data");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const hotLeads = useMemo(
+    () => leads.filter((l) => l.status === "hot"),
+    [leads]
+  );
+  const warmLeads = useMemo(
+    () => leads.filter((l) => l.status === "warm"),
+    [leads]
+  );
+  const lastHarvest = harvestRuns[0];
+  const funnelMap = useMemo(() => {
+    const map = new Map<string, number>();
+    funnel?.funnel.forEach((stage) => map.set(stage.stage, stage.count));
+    return map;
+  }, [funnel]);
+
+  const funnelCounts = {
+    harvested: funnelMap.get("vacancies_harvested") ?? 0,
+    enriched: funnelMap.get("vacancies_enriched") ?? 0,
+    qualified: funnelMap.get("leads_qualified") ?? 0,
+    contacted: funnelMap.get("leads_contacted") ?? 0,
+    meeting: 0,
+    converted: funnelMap.get("leads_converted") ?? 0,
+  };
+
+  const conversionRate = funnelCounts.contacted
+    ? Math.round((funnelCounts.converted / funnelCounts.contacted) * 100)
+    : 0;
+
+  const profileLeadCounts = useMemo(() => {
+    const counts = new Map<number, { total: number; hot: number }>();
+    for (const lead of leads) {
+      const current = counts.get(lead.search_profile_id) ?? { total: 0, hot: 0 };
+      current.total += 1;
+      if (lead.status === "hot") current.hot += 1;
+      counts.set(lead.search_profile_id, current);
+    }
+    return counts;
+  }, [leads]);
+
+  const harvestByProfile = useMemo(() => {
+    const map = new Map<number, ApiHarvestRun>();
+    for (const run of harvestRuns) {
+      if (!map.has(run.profile_id)) {
+        map.set(run.profile_id, run);
+      }
+    }
+    return map;
+  }, [harvestRuns]);
+
+  const profileNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const profile of profiles) {
+      map.set(profile.id, profile.name);
+    }
+    return map;
+  }, [profiles]);
 
   return (
     <div className="px-6 py-6">
@@ -40,9 +151,8 @@ export default function DashboardPage() {
             {"\uD83D\uDD25"} Good morning, closer
           </h1>
           <p className="mt-1 max-w-lg text-[15px] leading-relaxed text-foreground-secondary">
-            {hotLeads.length} hot leads waiting.{" "}
-            {lastHarvest.stats.newVacancies} new vacancies since yesterday.
-            Let&apos;s go.
+            {hotLeads.length} hot leads waiting. {" "}
+            {lastHarvest?.vacancies_new ?? 0} new vacancies since last harvest.
           </p>
         </div>
         <div className="hidden lg:block">
@@ -53,7 +163,9 @@ export default function DashboardPage() {
               alt="Always Be Closing"
               className="h-24 w-40 object-cover"
               loading="lazy"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
             />
             <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-sand-900/80 to-transparent px-2.5 py-1.5">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-white">
@@ -64,34 +176,40 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {error && (
+        <div className="mb-6 rounded-md border border-danger/20 bg-danger/10 px-4 py-3 text-[13px] text-danger">
+          {error}
+        </div>
+      )}
+
       {/* ── Stats row ────────────────────────────────── */}
       <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
           emoji={"\uD83D\uDD25"}
           label="Hot Leads"
-          value={String(hotLeads.length)}
-          change="+3 today"
+          value={String(leadStats?.by_status?.hot ?? hotLeads.length)}
+          change="Updated live"
           trend="up"
         />
         <StatCard
           emoji={"\u2600\uFE0F"}
           label="Warm Leads"
-          value={String(warmLeads.length)}
-          change="+7 this week"
+          value={String(leadStats?.by_status?.warm ?? warmLeads.length)}
+          change="Updated live"
           trend="up"
         />
         <StatCard
           emoji={"\uD83C\uDFE2"}
           label="Companies Tracked"
-          value="847"
-          change="142 new"
+          value={String(overview?.companies ?? 0)}
+          change="Live total"
           trend="up"
         />
         <StatCard
           emoji={"\uD83D\uDCB0"}
           label="Conversion Rate"
-          value={`${((funnel.converted / funnel.contacted) * 100).toFixed(0)}%`}
-          change="+2.3% vs last month"
+          value={`${conversionRate}%`}
+          change="Based on contacted leads"
           trend="up"
         />
       </div>
@@ -117,76 +235,91 @@ export default function DashboardPage() {
 
             <div className="overflow-x-auto rounded-lg border border-border bg-background-card">
               <div className="grid grid-cols-[1fr_90px_90px_90px_90px_32px] gap-3 border-b border-border px-5 py-2.5">
-                {["Company", "Score", "Status", "Vacancies", "Days Open", ""].map(
-                  (h) => (
-                    <span
-                      key={h}
-                      className="text-[11px] font-semibold uppercase tracking-[0.06em] text-foreground-muted"
-                    >
-                      {h}
-                    </span>
-                  )
-                )}
-              </div>
-              {mockLeads.slice(0, 5).map((lead) => {
-                const status = statusConfig[lead.status];
-                return (
-                  <Link
-                    key={lead.id}
-                    href={`/leads/${lead.id}`}
-                    className="group grid grid-cols-[1fr_90px_90px_90px_90px_32px] items-center gap-3 border-b border-border-subtle px-5 py-3 transition-colors last:border-0 hover:bg-background-hover"
+                {[
+                  "Company",
+                  "Score",
+                  "Status",
+                  "Vacancies",
+                  "Days Open",
+                  "",
+                ].map((h) => (
+                  <span
+                    key={h}
+                    className="text-[11px] font-semibold uppercase tracking-[0.06em] text-foreground-muted"
                   >
-                    <div className="flex flex-col">
-                      <span className="text-[13px] font-medium text-foreground">
-                        {lead.company.name}
-                      </span>
-                      <span className="text-[11px] text-foreground-muted">
-                        {lead.company.city} · {lead.company.sector}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="h-1.5 w-12 overflow-hidden rounded-full bg-sand-200">
-                        <div
-                          className={cn(
-                            "h-full rounded-full",
-                            scoreBgColor(lead.compositeScore)
-                          )}
-                          style={{ width: `${lead.compositeScore}%` }}
-                        />
-                      </div>
-                      <span className="text-[13px] font-semibold tabular-nums text-foreground">
-                        {lead.compositeScore}
-                      </span>
-                    </div>
-                    <span
-                      className={cn(
-                        "inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
-                        status.bg,
-                        status.color
-                      )}
+                    {h}
+                  </span>
+                ))}
+              </div>
+              {loading ? (
+                <div className="px-5 py-6 text-[13px] text-foreground-muted">
+                  Loading leads...
+                </div>
+              ) : hotLeads.length === 0 ? (
+                <div className="px-5 py-6 text-[13px] text-foreground-muted">
+                  No hot leads yet. Trigger a harvest to get started.
+                </div>
+              ) : (
+                hotLeads.slice(0, 5).map((lead) => {
+                  const status = statusConfig[lead.status as keyof typeof statusConfig];
+                  return (
+                    <Link
+                      key={lead.id}
+                      href={`/leads/${lead.id}`}
+                      className="group grid grid-cols-[1fr_90px_90px_90px_90px_32px] items-center gap-3 border-b border-border-subtle px-5 py-3 transition-colors last:border-0 hover:bg-background-hover"
                     >
-                      {status.emoji} {status.label}
-                    </span>
-                    <span className="text-[13px] tabular-nums text-foreground-secondary">
-                      {lead.vacancyCount} open
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <Clock className="h-3 w-3 text-foreground-faint" />
+                      <div className="flex flex-col">
+                        <span className="text-[13px] font-medium text-foreground">
+                          {lead.company_name ?? "Unknown company"}
+                        </span>
+                        <span className="text-[11px] text-foreground-muted">
+                          {lead.company_city ?? "Location unknown"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 w-12 overflow-hidden rounded-full bg-sand-200">
+                          <div
+                            className={cn(
+                              "h-full rounded-full",
+                              scoreBgColor(lead.composite_score)
+                            )}
+                            style={{ width: `${lead.composite_score}%` }}
+                          />
+                        </div>
+                        <span className="text-[13px] font-semibold tabular-nums text-foreground">
+                          {lead.composite_score}
+                        </span>
+                      </div>
                       <span
                         className={cn(
-                          "text-[13px] tabular-nums",
-                          lead.oldestVacancyDays > 60
-                            ? "font-medium text-signal-hot"
-                            : "text-foreground-secondary"
+                          "inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                          status.bg,
+                          status.color
                         )}
                       >
-                        {lead.oldestVacancyDays}d
+                        {status.emoji} {status.label}
                       </span>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-foreground-faint transition-colors group-hover:text-foreground" />
-                  </Link>
-                );
-              })}
+                      <span className="text-[13px] tabular-nums text-foreground-secondary">
+                        {lead.vacancy_count} open
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3 text-foreground-faint" />
+                        <span
+                          className={cn(
+                            "text-[13px] tabular-nums",
+                            lead.oldest_vacancy_days > 60
+                              ? "font-medium text-signal-hot"
+                              : "text-foreground-secondary"
+                          )}
+                        >
+                          {lead.oldest_vacancy_days}d
+                        </span>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-foreground-faint transition-colors group-hover:text-foreground" />
+                    </Link>
+                  );
+                })
+              )}
             </div>
           </div>
 
@@ -198,13 +331,17 @@ export default function DashboardPage() {
             <div className="rounded-lg border border-border bg-background-card p-5">
               <div className="space-y-2">
                 {[
-                  { label: "Harvested", value: funnel.harvested, emoji: "\uD83D\uDE9C" },
-                  { label: "Enriched", value: funnel.enriched, emoji: "\uD83E\uDDEA" },
-                  { label: "Qualified", value: funnel.qualified, emoji: "\u2705" },
-                  { label: "Contacted", value: funnel.contacted, emoji: "\uD83D\uDCE7" },
-                  { label: "Meeting", value: funnel.meeting, emoji: "\uD83E\uDD1D" },
-                  { label: "Converted", value: funnel.converted, emoji: "\uD83D\uDCB0" },
-                ].map((stage, i) => (
+                  {
+                    label: "Harvested",
+                    value: funnelCounts.harvested,
+                    emoji: "\uD83D\uDE9C",
+                  },
+                  { label: "Enriched", value: funnelCounts.enriched, emoji: "\uD83E\uDDEA" },
+                  { label: "Qualified", value: funnelCounts.qualified, emoji: "\u2705" },
+                  { label: "Contacted", value: funnelCounts.contacted, emoji: "\uD83D\uDCE7" },
+                  { label: "Meeting", value: funnelCounts.meeting, emoji: "\uD83E\uDD1D" },
+                  { label: "Converted", value: funnelCounts.converted, emoji: "\uD83D\uDCB0" },
+                ].map((stage, i, arr) => (
                   <div key={stage.label} className="flex items-center gap-3">
                     <span className="w-24 text-[12px] text-foreground-muted">
                       {stage.emoji} {stage.label}
@@ -214,9 +351,11 @@ export default function DashboardPage() {
                         <div
                           className="flex h-full items-center rounded bg-accent px-2"
                           style={{
-                            width: `${(stage.value / funnel.harvested) * 100}%`,
+                            width: funnelCounts.harvested
+                              ? `${(stage.value / funnelCounts.harvested) * 100}%`
+                              : "0%",
                             opacity: 0.15 + i * 0.15,
-                          } as React.CSSProperties}
+                          } as CSSProperties}
                         >
                           <span className="text-[11px] font-semibold tabular-nums text-foreground">
                             {stage.value.toLocaleString()}
@@ -224,20 +363,9 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     </div>
-                    {i > 0 && (
+                    {i > 0 && arr[i - 1].value > 0 && (
                       <span className="w-12 text-right text-[11px] tabular-nums text-foreground-muted">
-                        {(
-                          (stage.value /
-                            [
-                              funnel.harvested,
-                              funnel.enriched,
-                              funnel.qualified,
-                              funnel.contacted,
-                              funnel.meeting,
-                            ][i - 1]) *
-                          100
-                        ).toFixed(0)}
-                        %
+                        {((stage.value / arr[i - 1].value) * 100).toFixed(0)}%
                       </span>
                     )}
                   </div>
@@ -294,45 +422,51 @@ export default function DashboardPage() {
             <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.06em] text-foreground-muted">
               {"\uD83D\uDE9C"} Last Harvest
             </h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[13px] font-medium text-foreground">
-                  {lastHarvest.profileName}
-                </span>
-                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-success">
-                  {"\u2705"} Completed
-                </span>
+            {lastHarvest ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] font-medium text-foreground">
+                    {profileNameById.get(lastHarvest.profile_id) ?? `Profile ${lastHarvest.profile_id}`}
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-foreground-muted">
+                    {lastHarvest.status}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    {
+                      label: "Vacancies",
+                      value: lastHarvest.vacancies_found,
+                    },
+                    { label: "New", value: lastHarvest.vacancies_new },
+                    {
+                      label: "Companies",
+                      value: 0,
+                    },
+                    { label: "Errors", value: lastHarvest.error_message ? 1 : 0 },
+                  ].map((s) => (
+                    <div
+                      key={s.label}
+                      className="rounded-md bg-background-sunken px-3 py-2"
+                    >
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-foreground-faint">
+                        {s.label}
+                      </span>
+                      <p className="text-lg font-bold tabular-nums text-foreground">
+                        {s.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[11px] text-foreground-muted">
+                  {formatRelativeTime(lastHarvest.completed_at || lastHarvest.started_at || "")}
+                </p>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  {
-                    label: "Vacancies",
-                    value: lastHarvest.stats.vacanciesFound,
-                  },
-                  { label: "New", value: lastHarvest.stats.newVacancies },
-                  {
-                    label: "Companies",
-                    value: lastHarvest.stats.companiesMatched,
-                  },
-                  { label: "Errors", value: lastHarvest.stats.errors },
-                ].map((s) => (
-                  <div
-                    key={s.label}
-                    className="rounded-md bg-background-sunken px-3 py-2"
-                  >
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-foreground-faint">
-                      {s.label}
-                    </span>
-                    <p className="text-lg font-bold tabular-nums text-foreground">
-                      {s.value}
-                    </p>
-                  </div>
-                ))}
-              </div>
-              <p className="text-[11px] text-foreground-muted">
-                {formatRelativeTime(lastHarvest.completedAt || "")}
+            ) : (
+              <p className="text-[13px] text-foreground-muted">
+                No harvest runs yet.
               </p>
-            </div>
+            )}
           </div>
 
           {/* Active profiles */}
@@ -341,32 +475,50 @@ export default function DashboardPage() {
               {"\uD83D\uDD0D"} Active Profiles
             </h3>
             <div className="space-y-2">
-              {mockProfiles.map((profile) => (
-                <Link
-                  key={profile.id}
-                  href="/profiles"
-                  className="group flex items-center justify-between rounded-md px-3 py-2 transition-colors hover:bg-background-hover"
-                >
-                  <div>
-                    <span className="text-[13px] font-medium text-foreground">
-                      {profile.name}
-                    </span>
-                    <span className="ml-2 font-mono text-[11px] text-foreground-faint">
-                      {profile.slug}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {profile.hotLeads > 0 && (
-                      <span className="text-[11px] tabular-nums text-signal-hot">
-                        {"\uD83D\uDD25"} {profile.hotLeads}
-                      </span>
-                    )}
-                    <span className="text-[11px] tabular-nums text-foreground-muted">
-                      {profile.activeLeads} leads
-                    </span>
-                  </div>
-                </Link>
-              ))}
+              {profiles.length === 0 ? (
+                <p className="text-[12px] text-foreground-muted">
+                  No profiles yet. Create one to start harvesting.
+                </p>
+              ) : (
+                profiles.map((profile) => {
+                  const counts = profileLeadCounts.get(profile.id) ?? {
+                    total: 0,
+                    hot: 0,
+                  };
+                  const lastRun = harvestByProfile.get(profile.id);
+                  return (
+                    <Link
+                      key={profile.id}
+                      href="/profiles"
+                      className="group flex items-center justify-between rounded-md px-3 py-2 transition-colors hover:bg-background-hover"
+                    >
+                      <div>
+                        <span className="text-[13px] font-medium text-foreground">
+                          {profile.name}
+                        </span>
+                        <span className="ml-2 font-mono text-[11px] text-foreground-faint">
+                          {profile.slug}
+                        </span>
+                        {lastRun && (
+                          <span className="ml-2 text-[11px] text-foreground-faint">
+                            {formatRelativeTime(lastRun.completed_at || lastRun.started_at || "")}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {counts.hot > 0 && (
+                          <span className="text-[11px] tabular-nums text-signal-hot">
+                            {"\uD83D\uDD25"} {counts.hot}
+                          </span>
+                        )}
+                        <span className="text-[11px] tabular-nums text-foreground-muted">
+                          {counts.total} leads
+                        </span>
+                      </div>
+                    </Link>
+                  );
+                })
+              )}
             </div>
           </div>
 
@@ -378,7 +530,9 @@ export default function DashboardPage() {
               alt="Motivation"
               className="h-36 w-full object-cover"
               loading="lazy"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
             />
             <div className="absolute inset-0 bg-linear-to-t from-sand-900/90 via-sand-900/40 to-transparent" />
             <div className="absolute inset-x-0 bottom-0 px-4 py-3">

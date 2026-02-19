@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -13,13 +13,16 @@ import {
   Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { statusConfig, scoreColor, scoreBgColor, type LeadStatus } from "@/lib/mock-data";
 import {
-  mockLeads,
-  statusConfig,
-  scoreColor,
-  scoreBgColor,
-  type LeadStatus,
-} from "@/lib/mock-data";
+  getLeads,
+  getLeadStats,
+  getProfiles,
+  triggerHarvest,
+  type ApiLeadListItem,
+  type ApiLeadStats,
+  type ApiProfile,
+} from "@/lib/api";
 
 /* ── Sort options ───────────────────────────────────── */
 
@@ -70,6 +73,12 @@ export default function LeadBoardPage() {
   const [sortKey, setSortKey] = useState<SortKey>("composite");
   const [sortOpen, setSortOpen] = useState(false);
   const sortRef = useRef<HTMLDivElement>(null);
+  const [leads, setLeads] = useState<ApiLeadListItem[]>([]);
+  const [leadStats, setLeadStats] = useState<ApiLeadStats | null>(null);
+  const [profiles, setProfiles] = useState<ApiProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [harvestPending, setHarvestPending] = useState(false);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -83,33 +92,76 @@ export default function LeadBoardPage() {
     }
   }, [sortOpen]);
 
-  /* Filter leads by status + search */
-  const filtered = mockLeads
-    .filter((lead) => {
-      if (activeTab !== "all" && lead.status !== activeTab) return false;
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const sortByMap: Record<SortKey, string> = {
+          composite: "composite_score",
+          fit: "fit_score",
+          timing: "timing_score",
+          newest: "created_at",
+        };
+        const [leadList, stats, profilesRes] = await Promise.all([
+          getLeads({
+            limit: 200,
+            sortBy: sortByMap[sortKey],
+            sortOrder: sortKey === "newest" ? "desc" : "desc",
+            status: activeTab === "all" ? undefined : activeTab,
+          }),
+          getLeadStats(),
+          getProfiles(),
+        ]);
+        if (cancelled) return;
+        setLeads(leadList);
+        setLeadStats(stats);
+        setProfiles(profilesRes);
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Failed to load leads");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, sortKey]);
+
+  const filtered = useMemo(() => {
+    return leads.filter((lead) => {
       if (
         searchQuery &&
-        !lead.company.name.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+        !(lead.company_name ?? "").toLowerCase().includes(searchQuery.toLowerCase())
+      ) {
         return false;
-      return true;
-    })
-    .sort((a, b) => {
-      switch (sortKey) {
-        case "composite":
-          return b.compositeScore - a.compositeScore;
-        case "fit":
-          return b.fitScore - a.fitScore;
-        case "timing":
-          return b.timingScore - a.timingScore;
-        case "newest":
-          return a.oldestVacancyDays - b.oldestVacancyDays;
       }
+      return true;
     });
+  }, [leads, searchQuery]);
 
-  const hotCount = mockLeads.filter((l) => l.status === "hot").length;
-  const warmCount = mockLeads.filter((l) => l.status === "warm").length;
+  const hotCount = leadStats?.by_status?.hot ?? 0;
+  const warmCount = leadStats?.by_status?.warm ?? 0;
   const quote = closerQuotes[1];
+
+  async function handleTriggerHarvest() {
+    if (profiles.length === 0) return;
+    const profileId = profiles[0].id;
+    setHarvestPending(true);
+    try {
+      await triggerHarvest(profileId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to trigger harvest");
+    } finally {
+      setHarvestPending(false);
+    }
+  }
 
   return (
     <div className="px-6 py-6">
@@ -130,13 +182,27 @@ export default function LeadBoardPage() {
               <Download className="h-3.5 w-3.5" />
               Export
             </button>
-            <button className="flex items-center gap-1.5 rounded-md bg-accent px-3.5 py-2 text-[13px] font-medium text-accent-foreground transition-all duration-100 hover:bg-accent-hover active:scale-[0.97]">
+            <button
+              onClick={handleTriggerHarvest}
+              disabled={harvestPending || profiles.length === 0}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md bg-accent px-3.5 py-2 text-[13px] font-medium text-accent-foreground transition-all duration-100 hover:bg-accent-hover active:scale-[0.97]",
+                (harvestPending || profiles.length === 0) &&
+                  "cursor-not-allowed opacity-70"
+              )}
+            >
               <Target className="h-3.5 w-3.5" />
-              Trigger Harvest
+              {harvestPending ? "Triggering..." : "Trigger Harvest"}
             </button>
           </div>
         </div>
       </section>
+
+      {error && (
+        <div className="mb-4 rounded-md border border-danger/20 bg-danger/10 px-4 py-3 text-[13px] text-danger">
+          {error}
+        </div>
+      )}
 
       {/* ── Filter bar ───────────────────────────────── */}
       <section className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -236,7 +302,11 @@ export default function LeadBoardPage() {
       {/* ── Lead table ───────────────────────────────── */}
       <section className="mb-8">
         <div className="overflow-x-auto rounded-lg border border-border bg-background-card">
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-16">
+              <p className="text-[13px] text-foreground-muted">Loading leads...</p>
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16">
               <span className="text-3xl">{"\uD83E\uDD14"}</span>
               <p className="mt-2 text-[13px] text-foreground-muted">
@@ -276,9 +346,7 @@ export default function LeadBoardPage() {
               </thead>
               <tbody>
                 {filtered.map((lead) => {
-                  const status = statusConfig[lead.status];
-                  const erp = lead.scoringBreakdown.erpCompatibility.erp;
-
+                  const status = statusConfig[lead.status as LeadStatus];
                   return (
                     <tr
                       key={lead.id}
@@ -297,10 +365,10 @@ export default function LeadBoardPage() {
                               className="truncate text-[13px] font-medium text-foreground hover:underline"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              {lead.company.name}
+                              {lead.company_name ?? "Unknown company"}
                             </Link>
                             <span className="text-[11px] text-foreground-muted">
-                              {lead.company.city}
+                              {lead.company_city ?? "Location unknown"}
                             </span>
                           </div>
                         </div>
@@ -313,18 +381,18 @@ export default function LeadBoardPage() {
                             <div
                               className={cn(
                                 "h-full rounded-full",
-                                scoreBgColor(lead.compositeScore)
+                                scoreBgColor(lead.composite_score)
                               )}
-                              style={{ width: `${lead.compositeScore}%` }}
+                              style={{ width: `${lead.composite_score}%` }}
                             />
                           </div>
                           <span
                             className={cn(
                               "text-[13px] font-semibold tabular-nums",
-                              scoreColor(lead.compositeScore)
+                              scoreColor(lead.composite_score)
                             )}
                           >
-                            {lead.compositeScore}
+                            {lead.composite_score}
                           </span>
                         </div>
                       </td>
@@ -347,7 +415,7 @@ export default function LeadBoardPage() {
                       {/* Vacancies */}
                       <td className="px-5 py-3">
                         <span className="text-[13px] tabular-nums text-foreground-secondary">
-                          {lead.vacancyCount} open
+                          {lead.vacancy_count} open
                         </span>
                       </td>
 
@@ -358,12 +426,12 @@ export default function LeadBoardPage() {
                           <span
                             className={cn(
                               "text-[13px] tabular-nums",
-                              lead.oldestVacancyDays > 60
+                              lead.oldest_vacancy_days > 60
                                 ? "font-bold text-signal-hot"
                                 : "text-foreground-secondary"
                             )}
                           >
-                            {lead.oldestVacancyDays}d
+                            {lead.oldest_vacancy_days}d
                           </span>
                         </div>
                       </td>
@@ -371,15 +439,14 @@ export default function LeadBoardPage() {
                       {/* Platforms */}
                       <td className="px-5 py-3">
                         <span className="text-[12px] text-foreground-secondary">
-                          {lead.platforms.length}{" "}
-                          {lead.platforms.length === 1 ? "source" : "sources"}
+                          {lead.platform_count} {lead.platform_count === 1 ? "source" : "sources"}
                         </span>
                       </td>
 
                       {/* ERP */}
                       <td className="px-5 py-3">
                         <span className="inline-flex w-fit rounded border border-border-subtle px-1.5 py-0.5 text-center font-mono text-[11px] text-foreground-muted">
-                          {erp}
+                          {lead.company_erp ?? "-"}
                         </span>
                       </td>
 
