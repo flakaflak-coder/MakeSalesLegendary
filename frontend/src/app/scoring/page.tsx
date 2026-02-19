@@ -22,6 +22,7 @@ import {
   type ApiProfile,
   type ApiScoringConfig,
 } from "@/lib/api";
+import { toErrorMessage } from "@/lib/errors";
 
 const DEFAULT_FIT_WEIGHT = 0.6;
 
@@ -109,7 +110,7 @@ export default function ScoringTunerPage() {
         setSelectedProfileId((prev) => prev ?? profilesRes[0]?.id ?? null);
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load profiles");
+        setError(toErrorMessage(err, "Failed to load profiles"));
       }
     }
 
@@ -144,7 +145,7 @@ export default function ScoringTunerPage() {
         });
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load scoring config");
+        setError(toErrorMessage(err, "Failed to load scoring config"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -239,7 +240,7 @@ export default function ScoringTunerPage() {
       });
       setScoringConfig(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save scoring config");
+      setError(toErrorMessage(err, "Failed to save scoring config"));
     } finally {
       setSaving(false);
     }
@@ -251,7 +252,7 @@ export default function ScoringTunerPage() {
     try {
       await runScoring(selectedProfileId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to run scoring");
+      setError(toErrorMessage(err, "Failed to run scoring"));
     } finally {
       setScoringRunning(false);
     }

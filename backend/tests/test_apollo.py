@@ -86,9 +86,7 @@ async def test_enrich_company_by_domain(apollo_client: ApolloClient):
     with patch.object(apollo_client, "_post", new_callable=AsyncMock) as mock_post:
         mock_post.return_value = MOCK_ORG_RESPONSE
 
-        result = await apollo_client.enrich_company(
-            name="Acme B.V.", domain="acme.nl"
-        )
+        result = await apollo_client.enrich_company(name="Acme B.V.", domain="acme.nl")
 
     assert result is not None
     mock_post.assert_called_once_with(
@@ -125,7 +123,9 @@ async def test_enrich_company_api_error(apollo_client: ApolloClient):
     with patch.object(apollo_client, "_post", new_callable=AsyncMock) as mock_post:
         mock_post.side_effect = httpx.HTTPStatusError(
             "Rate limited",
-            request=httpx.Request("POST", "https://api.apollo.io/api/v1/organizations/enrich"),
+            request=httpx.Request(
+                "POST", "https://api.apollo.io/api/v1/organizations/enrich"
+            ),
             response=httpx.Response(429),
         )
 
@@ -198,7 +198,9 @@ async def test_search_contacts_api_error(apollo_client: ApolloClient):
     with patch.object(apollo_client, "_post", new_callable=AsyncMock) as mock_post:
         mock_post.side_effect = httpx.HTTPStatusError(
             "Server error",
-            request=httpx.Request("POST", "https://api.apollo.io/api/v1/mixed_people/search"),
+            request=httpx.Request(
+                "POST", "https://api.apollo.io/api/v1/mixed_people/search"
+            ),
             response=httpx.Response(500),
         )
 

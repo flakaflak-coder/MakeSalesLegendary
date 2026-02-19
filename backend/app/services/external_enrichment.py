@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.integrations.apollo import ApolloClient
 from app.integrations.kvk import KvKClient
+from app.integrations.openkvk import OpenKvKClient
 from app.models.company import Company
 from app.models.enrichment import EnrichmentRun
 from app.models.vacancy import Vacancy
@@ -24,6 +25,7 @@ class ExternalEnrichmentService:
             api_key=settings.kvk_api_key,
             base_url=settings.kvk_api_base_url,
         )
+        self._openkvk_client = OpenKvKClient()
         self._apollo_client = ApolloClient(
             api_key=settings.apollo_api_key,
             base_url=settings.apollo_api_base_url,
@@ -128,11 +130,28 @@ class ExternalEnrichmentService:
                     company.name,
                 )
 
-        # Step 2: Get full KvK profile
+        # Step 2: Free SBI lookup via KVK Open Dataset (no API key needed)
+        openkvk_raw: dict = {}
+        if company.kvk_number:
+            open_data = await self._openkvk_client.get_company(company.kvk_number)
+            if open_data:
+                openkvk_raw = open_data.raw_data
+                if open_data.sbi_codes and not company.sbi_codes:
+                    company.sbi_codes = open_data.sbi_codes
+                if not open_data.active:
+                    logger.info(
+                        "Company %s (KvK %s) is inactive",
+                        company.name,
+                        company.kvk_number,
+                    )
+
+        # Step 3: Full KvK profile (paid API — entity count, employees)
         if company.kvk_number:
             kvk_data = await self._kvk_client.get_company_profile(company.kvk_number)
             if kvk_data:
-                company.sbi_codes = kvk_data.sbi_codes
+                # SBI codes from paid API are richer (include descriptions)
+                if kvk_data.sbi_codes:
+                    company.sbi_codes = kvk_data.sbi_codes
                 company.entity_count = kvk_data.entity_count
                 company.kvk_data = kvk_data.raw_data
                 if kvk_data.employee_count and not company.employee_range:
@@ -140,7 +159,7 @@ class ExternalEnrichmentService:
                         kvk_data.employee_count
                     )
 
-        # Step 3: Apollo.io enrichment (employee count, revenue, industry)
+        # Step 4: Apollo.io enrichment (employee count, revenue, industry)
         apollo_data = await self._apollo_client.enrich_company(name=company.name)
         apollo_raw: dict = {}
         apollo_id: str | None = None
@@ -152,11 +171,12 @@ class ExternalEnrichmentService:
             apollo_raw = apollo_data.raw_data
             apollo_id = apollo_data.apollo_id
 
-        # Stores Apollo.io enrichment data (originally planned for Company.info)
+        # Stores Apollo.io enrichment data
         company.company_info_data = apollo_raw
 
         # Merge into enrichment_data blob
         company.enrichment_data = {
+            "openkvk_data": openkvk_raw,
             "kvk_data": company.kvk_data,
             "apollo_data": apollo_raw,
             "apollo_id": apollo_id,

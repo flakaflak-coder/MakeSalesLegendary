@@ -1,0 +1,25 @@
+{
+  "_cached_at": "2026-02-19T17:25:15.596186+00:00",
+  "_params": {
+    "action": "search",
+    "name": "Acme B.V."
+  },
+  "response": {
+    "resultaten": [
+      {
+        "kvkNummer": "12345678",
+        "naam": "Acme B.V.",
+        "adres": {
+          "binnenlandsAdres": {
+            "straatnaam": "Herengracht",
+            "huisnummer": "100",
+            "postcode": "1015 AA",
+            "plaats": "Amsterdam"
+          }
+        },
+        "type": "hoofdvestiging"
+      }
+    ],
+    "totaal": 1
+  }
+}

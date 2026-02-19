@@ -16,6 +16,7 @@ import {
   type ApiHarvestSummary,
   type ApiProfile,
 } from "@/lib/api";
+import { toErrorMessage } from "@/lib/errors";
 
 const funnelColors = [
   "bg-sand-900",
@@ -57,7 +58,7 @@ export default function AnalyticsPage() {
         setSelectedProfileId((prev) => prev ?? profilesRes[0]?.id ?? null);
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load profiles");
+        setError(toErrorMessage(err, "Failed to load profiles"));
       }
     }
 
@@ -90,7 +91,7 @@ export default function AnalyticsPage() {
         setHarvestSummary(harvestRes);
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load analytics");
+        setError(toErrorMessage(err, "Failed to load analytics"));
       } finally {
         if (!cancelled) setLoading(false);
       }

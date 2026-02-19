@@ -114,9 +114,7 @@ class ClaudeLLMClient:
                     messages=[
                         {
                             "role": "user",
-                            "content": (
-                                prompt
-                            ),
+                            "content": (prompt),
                         }
                     ],
                     timeout=60.0,
@@ -195,11 +193,15 @@ class ClaudeLLMClient:
         )
 
         if settings.api_cache_enabled:
-            cache_put("claude_llm", cache_params, {
-                "extracted_data": extracted_data,
-                "tokens_input": response.usage.input_tokens,
-                "tokens_output": response.usage.output_tokens,
-                "model": self.model,
-            })
+            cache_put(
+                "claude_llm",
+                cache_params,
+                {
+                    "extracted_data": extracted_data,
+                    "tokens_input": response.usage.input_tokens,
+                    "tokens_output": response.usage.output_tokens,
+                    "model": self.model,
+                },
+            )
 
         return result

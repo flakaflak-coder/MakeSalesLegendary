@@ -5,11 +5,18 @@ const ADMIN_TOKEN = process.env.NEXT_PUBLIC_ADMIN_TOKEN;
 export class ApiError extends Error {
   status: number;
   body: string | null;
+  code?: string;
 
-  constructor(message: string, status: number, body: string | null) {
+  constructor(
+    message: string,
+    status: number,
+    body: string | null,
+    code?: string
+  ) {
     super(message);
     this.status = status;
     this.body = body;
+    this.code = code;
   }
 }
 
@@ -26,7 +33,21 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const body = await res.text().catch(() => null);
-    throw new ApiError(`Request failed: ${res.status}`, res.status, body);
+    let message = `Request failed: ${res.status}`;
+    let code: string | undefined;
+    if (body) {
+      try {
+        const parsed = JSON.parse(body) as {
+          message?: string;
+          error?: string;
+        };
+        message = parsed.message || parsed.error || message;
+        code = parsed.error;
+      } catch {
+        message = body;
+      }
+    }
+    throw new ApiError(message, res.status, body, code);
   }
 
   if (res.status === 204) {

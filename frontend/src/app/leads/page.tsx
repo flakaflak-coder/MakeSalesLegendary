@@ -23,6 +23,7 @@ import {
   type ApiLeadStats,
   type ApiProfile,
 } from "@/lib/api";
+import { toErrorMessage } from "@/lib/errors";
 
 /* ── Sort options ───────────────────────────────────── */
 
@@ -106,7 +107,7 @@ export default function LeadBoardPage() {
         setSelectedProfileId((prev) => prev ?? profilesRes[0]?.id ?? null);
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load profiles");
+        setError(toErrorMessage(err, "Failed to load profiles"));
       }
     }
 
@@ -146,7 +147,7 @@ export default function LeadBoardPage() {
         setLeadStats(stats);
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load leads");
+        setError(toErrorMessage(err, "Failed to load leads"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -181,7 +182,7 @@ export default function LeadBoardPage() {
     try {
       await triggerHarvest(selectedProfileId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to trigger harvest");
+      setError(toErrorMessage(err, "Failed to trigger harvest"));
     } finally {
       setHarvestPending(false);
     }

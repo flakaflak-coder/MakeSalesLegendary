@@ -42,6 +42,7 @@ async def _request_with_retry(
             await asyncio.sleep(wait_time)
     raise RuntimeError("Unreachable")
 
+
 SERPAPI_BASE_URL = "https://serpapi.com/search"
 
 

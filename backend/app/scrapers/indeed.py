@@ -45,6 +45,7 @@ async def _request_with_retry(
             await asyncio.sleep(wait_time)
     raise RuntimeError("Unreachable")
 
+
 INDEED_BASE_URL = "https://nl.indeed.com/jobs"
 
 
@@ -93,10 +94,10 @@ class IndeedScraper:
             date_el = card.select_one(
                 "[data-testid='myJobsStateDate']"
             ) or card.select_one(".date")
-            snippet_el = card.select_one(
-                "div.job-snippet"
-            ) or card.select_one("[class*='job-snippet']") or card.select_one(
-                "table.jobCardShelfContainer tr td"
+            snippet_el = (
+                card.select_one("div.job-snippet")
+                or card.select_one("[class*='job-snippet']")
+                or card.select_one("table.jobCardShelfContainer tr td")
             )
 
             if not title_el:

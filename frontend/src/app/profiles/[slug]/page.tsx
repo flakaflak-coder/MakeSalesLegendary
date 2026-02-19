@@ -35,6 +35,7 @@ import {
   type ApiScoringConfig,
   type ApiExtractionPrompt,
 } from "@/lib/api";
+import { toErrorMessage } from "@/lib/errors";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -214,9 +215,7 @@ export default function ProfileDetailPage({
         setPromptVersionCount(0);
       }
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load profile",
-      );
+      setError(toErrorMessage(err, "Failed to load profile"));
     } finally {
       setLoading(false);
     }
@@ -269,8 +268,7 @@ export default function ProfileDetailPage({
     } catch (err) {
       setGlobalFeedback({
         type: "error",
-        message:
-          err instanceof Error ? err.message : "Failed to update profile info.",
+        message: toErrorMessage(err, "Failed to update profile info."),
       });
     } finally {
       setSavingInfo(false);
@@ -337,10 +335,7 @@ export default function ProfileDetailPage({
     } catch (err) {
       setGlobalFeedback({
         type: "error",
-        message:
-          err instanceof Error
-            ? err.message
-            : "Failed to update search terms.",
+        message: toErrorMessage(err, "Failed to update search terms."),
       });
     } finally {
       setSavingTerms(false);
@@ -408,10 +403,7 @@ export default function ProfileDetailPage({
     } catch (err) {
       setGlobalFeedback({
         type: "error",
-        message:
-          err instanceof Error
-            ? err.message
-            : "Failed to create extraction prompt.",
+        message: toErrorMessage(err, "Failed to create extraction prompt."),
       });
     } finally {
       setSavingPrompt(false);
@@ -431,8 +423,7 @@ export default function ProfileDetailPage({
     } catch (err) {
       setGlobalFeedback({
         type: "error",
-        message:
-          err instanceof Error ? err.message : "Failed to trigger harvest.",
+        message: toErrorMessage(err, "Failed to trigger harvest."),
       });
     } finally {
       setHarvestLoading(false);
@@ -451,10 +442,7 @@ export default function ProfileDetailPage({
     } catch (err) {
       setGlobalFeedback({
         type: "error",
-        message:
-          err instanceof Error
-            ? err.message
-            : "Failed to trigger enrichment.",
+        message: toErrorMessage(err, "Failed to trigger enrichment."),
       });
     } finally {
       setEnrichmentLoading(false);

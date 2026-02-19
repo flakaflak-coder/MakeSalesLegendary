@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     api_cache_enabled: bool = True
     api_cache_max_age_days: int = 30
     admin_token: str | None = None
+    environment: str = "development"
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

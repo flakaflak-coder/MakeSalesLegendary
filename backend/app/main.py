@@ -1,5 +1,6 @@
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 import app.models  # noqa: F401
 from app.api.analytics import router as analytics_router
@@ -11,6 +12,7 @@ from app.api.leads import router as leads_router
 from app.api.profiles import router as profiles_router
 from app.api.scoring import router as scoring_router
 from app.auth import require_admin
+from app.config import settings
 
 app = FastAPI(
     title="Signal Engine",
@@ -39,3 +41,15 @@ app.include_router(chat_router, dependencies=[Depends(require_admin)])
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(_, exc: Exception) -> JSONResponse:
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "internal_server_error",
+            "message": str(exc),
+            "mode": settings.environment,
+        },
+    )

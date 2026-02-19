@@ -39,6 +39,7 @@ import {
   type ApiLeadDetail,
   type ApiProfile,
 } from "@/lib/api";
+import { toErrorMessage } from "@/lib/errors";
 
 // ── Feedback action config ──────────────────────────
 
@@ -250,7 +251,7 @@ export default function LeadDetailPage({
         setProfiles(profilesRes);
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load lead");
+        setError(toErrorMessage(err, "Failed to load lead"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -450,7 +451,7 @@ export default function LeadDetailPage({
       setFeedbackReason("");
       setFeedbackNotes("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to submit feedback");
+      setError(toErrorMessage(err, "Failed to submit feedback"));
     } finally {
       setFeedbackPending(false);
     }
@@ -464,7 +465,7 @@ export default function LeadDetailPage({
       const updated = await getLead(lead.id);
       setLead(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to dismiss lead");
+      setError(toErrorMessage(err, "Failed to dismiss lead"));
     } finally {
       setDismissPending(false);
     }

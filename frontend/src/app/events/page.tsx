@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Search, Filter } from "lucide-react";
 import { formatDate, formatRelativeTime } from "@/lib/mock-data";
 import { getEvents, type ApiEventLog } from "@/lib/api";
+import { toErrorMessage } from "@/lib/errors";
 
 const eventTypes = [
   "harvest.triggered",
@@ -40,7 +41,7 @@ export default function EventsPage() {
         setEvents(data);
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load events");
+        setError(toErrorMessage(err, "Failed to load events"));
       } finally {
         if (!cancelled) setLoading(false);
       }

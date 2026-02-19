@@ -22,12 +22,12 @@ import {
   getProfiles,
   getScoringConfig,
   triggerHarvest,
-  ApiError,
   type ApiHarvestRun,
   type ApiLeadListItem,
   type ApiProfile,
   type ApiScoringConfig,
 } from "@/lib/api";
+import { toErrorMessage } from "@/lib/errors";
 
 /* ── Types for the New Profile form ───────────────────────── */
 
@@ -166,21 +166,7 @@ export default function ProfilesPage() {
       );
       setScoringConfigs(Object.fromEntries(configEntries));
     } catch (err) {
-      if (err instanceof ApiError) {
-        // Try to extract a meaningful message from the API error body
-        let message = `Request failed (${err.status})`;
-        if (err.body) {
-          try {
-            const parsed = JSON.parse(err.body);
-            message = parsed.detail ?? parsed.message ?? message;
-          } catch {
-            message = err.body;
-          }
-        }
-        setFormError(message);
-      } else {
-        setFormError(err instanceof Error ? err.message : "Failed to create profile.");
-      }
+      setFormError(toErrorMessage(err, "Failed to create profile."));
     } finally {
       setFormSubmitting(false);
     }
@@ -217,7 +203,7 @@ export default function ProfilesPage() {
         setScoringConfigs(Object.fromEntries(configEntries));
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load profiles");
+        setError(toErrorMessage(err, "Failed to load profiles"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -253,7 +239,7 @@ export default function ProfilesPage() {
     try {
       await triggerHarvest(profileId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to trigger harvest");
+      setError(toErrorMessage(err, "Failed to trigger harvest"));
     } finally {
       setTriggering(null);
     }

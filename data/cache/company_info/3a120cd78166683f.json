@@ -1,0 +1,27 @@
+{
+  "_cached_at": "2026-02-19T17:26:13.138410+00:00",
+  "_params": {
+    "kvk_number": "12345678"
+  },
+  "response": {
+    "kvkNumber": "12345678",
+    "companyName": "Acme B.V.",
+    "employeeCount": 150,
+    "employeeRange": "100-199",
+    "revenueRange": "10M-50M",
+    "sbiCodes": [
+      {
+        "code": "6201",
+        "description": "Software development"
+      }
+    ],
+    "legalForm": "B.V.",
+    "foundedDate": "2010-01-15",
+    "activeStatus": true,
+    "financials": {
+      "revenue": 25000000,
+      "profit": 3000000,
+      "year": 2024
+    }
+  }
+}

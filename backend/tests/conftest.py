@@ -19,6 +19,7 @@ settings.api_cache_enabled = False
 def compile_jsonb_sqlite(type_, compiler, **kw):
     return "JSON"
 
+
 TEST_DATABASE_URL = "sqlite+aiosqlite://"
 
 engine = create_async_engine(

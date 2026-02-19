@@ -30,14 +30,18 @@ def upgrade() -> None:
         sa.Column("fit_score", sa.Float(), nullable=False, server_default="0.0"),
         sa.Column("timing_score", sa.Float(), nullable=False, server_default="0.0"),
         sa.Column("composite_score", sa.Float(), nullable=False, server_default="0.0"),
-        sa.Column("status", sa.String(length=20), nullable=False, server_default="monitor"),
+        sa.Column(
+            "status", sa.String(length=20), nullable=False, server_default="monitor"
+        ),
         sa.Column(
             "scoring_breakdown",
             postgresql.JSONB(astext_type=sa.Text()),
             nullable=True,
         ),
         sa.Column("vacancy_count", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("oldest_vacancy_days", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column(
+            "oldest_vacancy_days", sa.Integer(), nullable=False, server_default="0"
+        ),
         sa.Column("platform_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("scored_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
@@ -52,9 +56,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(
-            ["company_id"], ["companies.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
             ["search_profile_id"], ["search_profiles.id"], ondelete="CASCADE"
         ),
@@ -132,9 +134,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(
-            ["lead_id"], ["leads.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["lead_id"], ["leads.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
 

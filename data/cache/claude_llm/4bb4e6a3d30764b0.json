@@ -1,0 +1,29 @@
+{
+  "_cached_at": "2026-02-19T17:26:13.088800+00:00",
+  "_params": {
+    "text_hash": "4c2e9e6da31a64c7",
+    "schema_keys": [
+      "automation_status",
+      "complexity_signals",
+      "erp_systems",
+      "p2p_tools",
+      "team_size",
+      "volume_indicators"
+    ]
+  },
+  "response": {
+    "extracted_data": {
+      "erp_systems": [
+        "SAP"
+      ],
+      "p2p_tools": null,
+      "team_size": null,
+      "volume_indicators": null,
+      "complexity_signals": null,
+      "automation_status": null
+    },
+    "tokens_input": 500,
+    "tokens_output": 200,
+    "model": "claude-sonnet-4-20250514"
+  }
+}

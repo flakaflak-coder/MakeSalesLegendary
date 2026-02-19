@@ -1,0 +1,32 @@
+{
+  "_cached_at": "2026-02-19T17:26:13.060888+00:00",
+  "_params": {
+    "text_hash": "7c3a55b235cb4341",
+    "schema_keys": [
+      "automation_status",
+      "complexity_signals",
+      "erp_systems",
+      "p2p_tools",
+      "team_size",
+      "volume_indicators"
+    ]
+  },
+  "response": {
+    "extracted_data": {
+      "erp_systems": [
+        "SAP",
+        "Exact Online"
+      ],
+      "p2p_tools": [
+        "Basware"
+      ],
+      "team_size": "5 medewerkers",
+      "volume_indicators": "15.000 inkoopfacturen per jaar",
+      "complexity_signals": "internationale organisatie, 3 landen",
+      "automation_status": "unknown"
+    },
+    "tokens_input": 500,
+    "tokens_output": 200,
+    "model": "claude-sonnet-4-20250514"
+  }
+}

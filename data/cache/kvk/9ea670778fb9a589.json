@@ -1,0 +1,11 @@
+{
+  "_cached_at": "2026-02-19T17:25:15.619956+00:00",
+  "_params": {
+    "action": "search",
+    "name": "Nonexistent Company"
+  },
+  "response": {
+    "resultaten": [],
+    "totaal": 0
+  }
+}

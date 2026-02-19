@@ -31,6 +31,7 @@ import {
   type ApiLeadStats,
   type ApiProfile,
 } from "@/lib/api";
+import { toErrorMessage } from "@/lib/errors";
 
 export default function DashboardPage() {
   const quote = useMemo(() => getRandomQuote(), []);
@@ -65,7 +66,7 @@ export default function DashboardPage() {
         setSelectedProfileId((prev) => prev ?? profilesRes[0]?.id ?? null);
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load profiles");
+        setError(toErrorMessage(err, "Failed to load profiles"));
       }
     }
 
@@ -104,7 +105,7 @@ export default function DashboardPage() {
         setHarvestRuns(runs);
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load data");
+        setError(toErrorMessage(err, "Failed to load data"));
       } finally {
         if (!cancelled) setLoading(false);
       }

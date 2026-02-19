@@ -1,0 +1,31 @@
+{
+  "_cached_at": "2026-02-19T17:25:15.638315+00:00",
+  "_params": {
+    "action": "profile",
+    "kvk_number": "12345678"
+  },
+  "response": {
+    "kvkNummer": "12345678",
+    "naam": "Acme B.V.",
+    "formeleRegistratiedatum": "2010-01-15",
+    "indNonMailing": "Nee",
+    "totaalWerkzamePersonen": 150,
+    "spiIds": [
+      {
+        "spiCode": "6201",
+        "spiOmschrijving": "Ontwikkelen en uitgeven van software"
+      }
+    ],
+    "vestigingen": [
+      {
+        "vestigingsnummer": "000012345678",
+        "eersteHandelsnaam": "Acme B.V."
+      },
+      {
+        "vestigingsnummer": "000012345679",
+        "eersteHandelsnaam": "Acme Rotterdam"
+      }
+    ],
+    "_links": {}
+  }
+}

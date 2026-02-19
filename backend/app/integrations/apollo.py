@@ -158,9 +158,7 @@ class ApolloClient:
             domain=org.get("primary_domain"),
             employee_count=employee_count,
             employee_range=(
-                employee_count_to_range(employee_count)
-                if employee_count
-                else None
+                employee_count_to_range(employee_count) if employee_count else None
             ),
             revenue=revenue,
             revenue_range=revenue_to_range(revenue) if revenue else None,
@@ -233,9 +231,19 @@ class ApolloClient:
         name = name.lower().strip()
         # Remove common Dutch/English company suffixes
         for suffix in [
-            "b.v.", "bv", "n.v.", "nv", "b.v", "n.v",
-            "holding", "group", "groep", "nederland",
-            "international", "services", "solutions",
+            "b.v.",
+            "bv",
+            "n.v.",
+            "nv",
+            "b.v",
+            "n.v",
+            "holding",
+            "group",
+            "groep",
+            "nederland",
+            "international",
+            "services",
+            "solutions",
         ]:
             name = name.replace(suffix, "")
         # Remove non-alphanumeric

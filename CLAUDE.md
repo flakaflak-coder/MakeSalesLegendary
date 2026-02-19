@@ -418,3 +418,6 @@ MakeSalesLegendary/
 - Cleaned Claude LLM retry loop (removed unused state, shortened prompt construction) to pass ruff.
 - Reordered external enrichment imports and removed an unused scoring page variable to keep lint clean.
 - Re-ran backend tests (151 passing), backend ruff, and frontend eslint with no errors.
+- Added a global backend exception handler to standardize JSON error responses.
+- Added a frontend error mapper so API failures show user-friendly messages across major pages.
+- Re-ran backend tests and frontend lint cleanly.

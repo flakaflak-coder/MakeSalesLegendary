@@ -47,11 +47,15 @@ def test_cache_expiry(tmp_path):
 
         path = _cache_key("serpapi", params)
         old_date = (datetime.now(UTC) - timedelta(days=31)).isoformat()
-        path.write_text(json.dumps({
-            "_cached_at": old_date,
-            "_params": params,
-            "response": response,
-        }))
+        path.write_text(
+            json.dumps(
+                {
+                    "_cached_at": old_date,
+                    "_params": params,
+                    "response": response,
+                }
+            )
+        )
 
         # Should be expired with 30 day max age
         assert cache_get("serpapi", params, max_age_days=30) is None

@@ -14,6 +14,7 @@ import {
   type ApiHarvestSummary,
   type ApiProfile,
 } from "@/lib/api";
+import { toErrorMessage } from "@/lib/errors";
 
 const harvestStatusConfig = {
   completed: {
@@ -86,7 +87,7 @@ export default function HarvestMonitorPage() {
       setSummary(summaryRes);
       setProfiles(profilesRes);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load harvest runs");
+      setError(toErrorMessage(err, "Failed to load harvest runs"));
     } finally {
       setLoading(false);
     }
@@ -140,7 +141,7 @@ export default function HarvestMonitorPage() {
       await triggerHarvest(targetId);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to trigger harvest");
+      setError(toErrorMessage(err, "Failed to trigger harvest"));
     } finally {
       setTriggering(false);
     }
