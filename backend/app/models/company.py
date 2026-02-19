@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import DateTime, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -24,6 +24,15 @@ class Company(Base):
     enriched_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    enrichment_status: Mapped[str] = mapped_column(
+        String(20), default="pending"
+    )  # pending, completed, failed, skipped
+    enrichment_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("enrichment_runs.id", ondelete="SET NULL"), nullable=True
+    )
+    kvk_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    company_info_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    extraction_quality: Mapped[float | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

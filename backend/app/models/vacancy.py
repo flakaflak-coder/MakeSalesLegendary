@@ -35,6 +35,12 @@ class Vacancy(Base):
     harvest_run_id: Mapped[int | None] = mapped_column(
         ForeignKey("harvest_runs.id", ondelete="SET NULL"), nullable=True
     )
+    extraction_status: Mapped[str] = mapped_column(
+        String(20), default="pending"
+    )  # pending, completed, failed, skipped
+    extraction_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("enrichment_runs.id", ondelete="SET NULL"), nullable=True
+    )
 
     __table_args__ = (
         Index("ix_vacancy_source_external", "source", "external_id", unique=True),
