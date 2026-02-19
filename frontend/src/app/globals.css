@@ -1,0 +1,188 @@
+@import "tailwindcss";
+
+/*
+ * Signal Engine — Claude-inspired sand palette
+ * Warm, confident, human. Not another blue SaaS dashboard.
+ */
+
+:root {
+  /* Sand foundations — warm, not gray */
+  --sand-50: #faf8f5;
+  --sand-100: #f5f0ea;
+  --sand-200: #ebe4d9;
+  --sand-300: #ddd3c3;
+  --sand-400: #c4b5a0;
+  --sand-500: #a89880;
+  --sand-600: #8d7d66;
+  --sand-700: #6b5e4a;
+  --sand-800: #4a4035;
+  --sand-900: #2d2722;
+  --sand-950: #1a1613;
+
+  /* Terracotta accent — warm, earthy, intentional */
+  --accent-50: #fdf5f0;
+  --accent-100: #fae8db;
+  --accent-200: #f4ccb0;
+  --accent-300: #eba87c;
+  --accent-400: #e08a52;
+  --accent-500: #d4722f;
+  --accent-600: #b85a22;
+  --accent-700: #94461d;
+  --accent-800: #6e3518;
+  --accent-900: #4a2512;
+
+  /* Semantic colors */
+  --signal-hot: #d14b2c;
+  --signal-warm: #d4a04a;
+  --signal-monitor: #a89880;
+  --signal-dismissed: #c4b5a0;
+
+  --success: #3d8c5c;
+  --warning: #c68a1d;
+  --danger: #c43d3d;
+
+  /* Theme tokens */
+  --background: var(--sand-50);
+  --background-card: #ffffff;
+  --background-elevated: #ffffff;
+  --background-sunken: var(--sand-100);
+  --background-hover: var(--sand-100);
+  --background-active: var(--sand-200);
+
+  --foreground: var(--sand-950);
+  --foreground-secondary: var(--sand-700);
+  --foreground-muted: var(--sand-500);
+  --foreground-faint: var(--sand-500);
+
+  --border: var(--sand-200);
+  --border-subtle: var(--sand-100);
+  --border-strong: var(--sand-300);
+
+  --accent: var(--accent-500);
+  --accent-foreground: #ffffff;
+  --accent-hover: var(--accent-600);
+  --accent-subtle: var(--accent-50);
+  --accent-border: var(--accent-200);
+
+  --sidebar-bg: var(--sand-900);
+  --sidebar-fg: var(--sand-200);
+  --sidebar-fg-muted: var(--sand-500);
+  --sidebar-fg-active: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-hover: rgba(255, 255, 255, 0.05);
+  --sidebar-active: rgba(255, 255, 255, 0.1);
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-background-card: var(--background-card);
+  --color-background-elevated: var(--background-elevated);
+  --color-background-sunken: var(--background-sunken);
+  --color-background-hover: var(--background-hover);
+  --color-background-active: var(--background-active);
+
+  --color-foreground-secondary: var(--foreground-secondary);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-faint: var(--foreground-faint);
+
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-accent-border: var(--accent-border);
+
+  --color-sidebar-bg: var(--sidebar-bg);
+  --color-sidebar-fg: var(--sidebar-fg);
+  --color-sidebar-fg-muted: var(--sidebar-fg-muted);
+  --color-sidebar-fg-active: var(--sidebar-fg-active);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-sidebar-active: var(--sidebar-active);
+
+  --color-signal-hot: var(--signal-hot);
+  --color-signal-warm: var(--signal-warm);
+  --color-signal-monitor: var(--signal-monitor);
+  --color-signal-dismissed: var(--signal-dismissed);
+
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+
+  --color-sand-50: var(--sand-50);
+  --color-sand-100: var(--sand-100);
+  --color-sand-200: var(--sand-200);
+  --color-sand-300: var(--sand-300);
+  --color-sand-400: var(--sand-400);
+  --color-sand-500: var(--sand-500);
+  --color-sand-600: var(--sand-600);
+  --color-sand-700: var(--sand-700);
+  --color-sand-800: var(--sand-800);
+  --color-sand-900: var(--sand-900);
+  --color-sand-950: var(--sand-950);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* Base styles */
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling — warm, not chrome default */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--sand-300);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--sand-400);
+}
+
+/* Selection color */
+::selection {
+  background: var(--accent-200);
+  color: var(--sand-900);
+}
+
+/* Focus ring — warm accent, not blue */
+:focus-visible {
+  outline: 2px solid var(--accent-400);
+  outline-offset: 2px;
+}
+
+/* Tabular numbers for data-heavy UI */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Disable transitions for reduced-motion users */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
+}
