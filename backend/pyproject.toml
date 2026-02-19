@@ -15,6 +15,7 @@ dependencies = [
     "beautifulsoup4>=4.12,<5",
     "serpapi>=0.1,<1",
     "pyyaml>=6.0,<7",
+    "anthropic>=0.42,<1",
 ]
 
 [project.optional-dependencies]
@@ -40,6 +41,9 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
 
 [build-system]
 requires = ["setuptools>=75"]
