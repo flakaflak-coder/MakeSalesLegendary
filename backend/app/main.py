@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from app.api.harvest import router as harvest_router
 from app.api.profiles import router as profiles_router
 
 app = FastAPI(
@@ -9,6 +10,7 @@ app = FastAPI(
 )
 
 app.include_router(profiles_router)
+app.include_router(harvest_router)
 
 
 @app.get("/health")
