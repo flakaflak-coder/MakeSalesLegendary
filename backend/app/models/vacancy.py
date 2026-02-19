@@ -35,6 +35,9 @@ class Vacancy(Base):
     harvest_run_id: Mapped[int | None] = mapped_column(
         ForeignKey("harvest_runs.id", ondelete="SET NULL"), nullable=True
     )
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )  # Actual publication date from source (parsed from "3 days ago" etc.)
     extraction_status: Mapped[str] = mapped_column(
         String(20), default="pending"
     )  # pending, completed, failed, skipped

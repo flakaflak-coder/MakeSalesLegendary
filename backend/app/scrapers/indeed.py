@@ -18,6 +18,7 @@ class IndeedResult:
     location: str
     job_url: str
     source: str = "indeed"
+    posted_at: str | None = None
 
 
 class IndeedScraper:
@@ -51,6 +52,7 @@ class IndeedScraper:
             link_el = card.select_one("h2.jobTitle a")
             company_el = card.select_one("[data-testid='company-name']")
             location_el = card.select_one("[data-testid='text-location']")
+            date_el = card.select_one("[data-testid='myJobsStateDate']") or card.select_one(".date")
 
             if not title_el:
                 continue
@@ -74,6 +76,7 @@ class IndeedScraper:
                     job_url=(
                         f"https://nl.indeed.com/viewjob?jk={job_key}" if job_key else ""
                     ),
+                    posted_at=(date_el.get_text(strip=True) if date_el else None),
                 )
             )
         return results

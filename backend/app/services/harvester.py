@@ -12,6 +12,7 @@ from app.models.vacancy import Vacancy
 from app.scrapers.indeed import IndeedResult, IndeedScraper
 from app.scrapers.serpapi import SerpApiHarvester, SerpApiResult
 from app.services.dedup import find_or_create_company
+from app.utils.date_parser import parse_relative_date
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,10 @@ class HarvestService:
 
         company = await find_or_create_company(self.db, item.company_name)
 
+        # Parse published_at from source's relative date string
+        posted_at_raw = getattr(item, "posted_at", None)
+        published_at = parse_relative_date(posted_at_raw) if posted_at_raw else None
+
         vacancy = Vacancy(
             external_id=item.external_id,
             source=item.source,
@@ -118,6 +123,7 @@ class HarvestService:
             job_url=item.job_url if hasattr(item, "job_url") else "",
             location=item.location,
             raw_text=item.description if hasattr(item, "description") else None,
+            published_at=published_at,
             harvest_run_id=run_id,
         )
         self.db.add(vacancy)

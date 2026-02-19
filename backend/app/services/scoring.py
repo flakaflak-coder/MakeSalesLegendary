@@ -10,6 +10,23 @@ from app.models.vacancy import Vacancy
 
 logger = logging.getLogger(__name__)
 
+
+def _vacancy_age_date(v: Vacancy) -> datetime:
+    """Get the best available date for vacancy age calculation.
+
+    Prefers published_at (actual publication date from source) over
+    first_seen_at (when we first scraped it).
+    """
+    if v.published_at is not None:
+        dt = v.published_at
+    else:
+        dt = v.first_seen_at
+    # Ensure timezone-aware
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt
+
+
 # Default scoring config used when no ScoringConfig row exists in the DB
 DEFAULT_FIT_CRITERIA: dict = {
     "employee_count": {
@@ -260,19 +277,7 @@ class ScoringService:
         # Compute vacancy stats
         now = datetime.now(UTC)
         oldest_days = (
-            max(
-                (
-                    now
-                    - v.first_seen_at.replace(
-                        tzinfo=(
-                            UTC
-                            if v.first_seen_at.tzinfo is None
-                            else v.first_seen_at.tzinfo
-                        )
-                    )
-                ).days
-                for v in vacancies
-            )
+            max((now - _vacancy_age_date(v)).days for v in vacancies)
             if vacancies
             else 0
         )
@@ -512,20 +517,9 @@ class ScoringService:
         now = datetime.now(UTC)
 
         # Signal: vacancy open for more than 60 days
+        # Uses published_at (actual publication date) when available, falls back to first_seen_at
         oldest_days = (
-            max(
-                (
-                    now
-                    - v.first_seen_at.replace(
-                        tzinfo=(
-                            UTC
-                            if v.first_seen_at.tzinfo is None
-                            else v.first_seen_at.tzinfo
-                        )
-                    )
-                ).days
-                for v in vacancies
-            )
+            max((now - _vacancy_age_date(v)).days for v in vacancies)
             if vacancies
             else 0
         )
