@@ -133,13 +133,13 @@ export default function LeadBoardPage() {
         };
         const [leadList, stats] = await Promise.all([
           getLeads({
-            profileId: selectedProfileId,
+            profileId: selectedProfileId ?? undefined,
             limit: 200,
             sortBy: sortByMap[sortKey],
             sortOrder: "desc",
             status: activeTab === "all" ? undefined : activeTab,
           }),
-          getLeadStats(selectedProfileId),
+          getLeadStats(selectedProfileId ?? undefined),
         ]);
         if (cancelled) return;
         setLeads(leadList);
@@ -259,6 +259,22 @@ export default function LeadBoardPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-foreground-muted">
+                Profile
+              </span>
+              <select
+                value={selectedProfileId ?? ""}
+                onChange={(e) => setSelectedProfileId(Number(e.target.value))}
+                className="rounded-md border border-border bg-background-card px-3 py-1.5 text-[13px] font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30"
+              >
+                {profiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </option>
+                ))}
+              </select>
+            </div>
             <button
               onClick={handleExport}
               className="flex items-center gap-1.5 rounded-md border border-border px-3.5 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-background-hover active:bg-background-active"
@@ -268,10 +284,10 @@ export default function LeadBoardPage() {
             </button>
             <button
               onClick={handleTriggerHarvest}
-              disabled={harvestPending || profiles.length === 0}
+              disabled={harvestPending || !selectedProfileId}
               className={cn(
                 "flex items-center gap-1.5 rounded-md bg-accent px-3.5 py-2 text-[13px] font-medium text-accent-foreground transition-all duration-100 hover:bg-accent-hover active:scale-[0.97]",
-                (harvestPending || profiles.length === 0) &&
+                (harvestPending || !selectedProfileId) &&
                   "cursor-not-allowed opacity-70"
               )}
             >
@@ -431,6 +447,21 @@ export default function LeadBoardPage() {
               <tbody>
                 {filtered.map((lead) => {
                   const status = statusConfig[lead.status as LeadStatus];
+                  const enrichmentStatus = lead.company_enrichment_status ?? "unknown";
+                  const enrichmentLabel =
+                    enrichmentStatus === "completed"
+                      ? "Enriched"
+                      : enrichmentStatus === "failed"
+                        ? "Enrichment failed"
+                        : enrichmentStatus === "running"
+                          ? "Enriching"
+                          : enrichmentStatus === "pending"
+                            ? "Enrichment pending"
+                            : "Enrichment unknown";
+                  const extractionQuality =
+                    lead.company_extraction_quality != null
+                      ? Math.round(lead.company_extraction_quality * 100)
+                      : null;
                   return (
                     <tr
                       key={lead.id}
@@ -453,6 +484,25 @@ export default function LeadBoardPage() {
                             </Link>
                             <span className="text-[11px] text-foreground-muted">
                               {lead.company_city ?? "Location unknown"}
+                            </span>
+                            <span className="mt-0.5 inline-flex items-center gap-1 text-[10px] text-foreground-faint">
+                              <span
+                                className={cn(
+                                  "inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                                  enrichmentStatus === "completed"
+                                    ? "bg-success/10 text-success"
+                                    : enrichmentStatus === "failed"
+                                      ? "bg-danger/10 text-danger"
+                                      : "bg-sand-100 text-foreground-muted"
+                                )}
+                              >
+                                {enrichmentLabel}
+                              </span>
+                              {extractionQuality != null && (
+                                <span className="tabular-nums">
+                                  {extractionQuality}% extracted
+                                </span>
+                              )}
                             </span>
                           </div>
                         </div>

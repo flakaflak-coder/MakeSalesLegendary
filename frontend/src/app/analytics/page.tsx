@@ -72,15 +72,16 @@ export default function AnalyticsPage() {
     if (!selectedProfileId) return;
     let cancelled = false;
 
+    const pid = selectedProfileId;
     async function load() {
       setLoading(true);
       setError(null);
       try {
         const [funnelRes, scoringRes, termRes, harvestRes] = await Promise.all([
-          getAnalyticsFunnel(selectedProfileId),
-          getAnalyticsScoringAccuracy(selectedProfileId),
-          getAnalyticsTermPerformance(selectedProfileId),
-          getHarvestSummary(selectedProfileId, 12),
+          getAnalyticsFunnel(pid),
+          getAnalyticsScoringAccuracy(pid),
+          getAnalyticsTermPerformance(pid),
+          getHarvestSummary(pid, 12),
         ]);
         if (cancelled) return;
         setFunnel(funnelRes);

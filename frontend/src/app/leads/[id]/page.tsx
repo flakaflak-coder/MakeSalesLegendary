@@ -309,6 +309,11 @@ export default function LeadDetailPage({
   const fitBreakdown = asRecord(fit.breakdown);
   const timingBreakdown = asRecord(timing.breakdown);
   const company = lead.company;
+  const enrichmentStatus = company?.enrichment_status ?? "unknown";
+  const extractionQuality =
+    company?.extraction_quality != null
+      ? Math.round(company.extraction_quality * 100)
+      : null;
 
   const vacancies = lead.vacancies.map((vacancy) => {
     const extracted = asRecord(vacancy.extracted_data);
@@ -430,7 +435,7 @@ export default function LeadDetailPage({
   const activeTimingSignals = timingSignals.filter((s) => s.points > 0);
 
   async function handleSubmitFeedback() {
-    if (!feedbackAction) return;
+    if (!feedbackAction || !lead) return;
     setFeedbackPending(true);
     try {
       await createLeadFeedback(lead.id, {
@@ -449,6 +454,7 @@ export default function LeadDetailPage({
   }
 
   async function handleDismissLead() {
+    if (!lead) return;
     setDismissPending(true);
     try {
       await updateLeadStatus(lead.id, "dismissed");
@@ -475,6 +481,12 @@ export default function LeadDetailPage({
       {error && (
         <div className="mb-4 rounded-md border border-danger/20 bg-danger/10 px-4 py-3 text-[13px] text-danger">
           {error}
+        </div>
+      )}
+
+      {company && enrichmentStatus !== "completed" && (
+        <div className="mb-4 rounded-md border border-warning/20 bg-warning/10 px-4 py-3 text-[13px] text-warning">
+          Enrichment is {enrichmentStatus}. Some company details may be missing.
         </div>
       )}
 
@@ -524,6 +536,15 @@ export default function LeadDetailPage({
                   <span className="inline-flex items-center gap-1">
                     <TrendingUp className="h-3.5 w-3.5 text-foreground-faint" />
                     {company?.revenue_range ?? "Unknown"}
+                  </span>
+                  <span className="text-foreground-faint">{"\u2502"}</span>
+                  <span className="inline-flex items-center gap-1 text-[12px] text-foreground-muted">
+                    Enrichment: {enrichmentStatus}
+                    {extractionQuality != null && (
+                      <span className="text-foreground-faint">
+                        ({extractionQuality}% extracted)
+                      </span>
+                    )}
                   </span>
                 </div>
               </div>
@@ -1066,6 +1087,22 @@ export default function LeadDetailPage({
                 </span>
                 <span className="rounded border border-accent-border bg-accent-subtle px-2 py-0.5 text-[11px] font-medium text-accent">
                   {profileName ?? `Profile ${lead.search_profile_id}`}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] text-foreground-secondary">
+                  Enrichment
+                </span>
+                <span className="text-[12px] font-medium text-foreground">
+                  {enrichmentStatus}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] text-foreground-secondary">
+                  Extraction Quality
+                </span>
+                <span className="text-[12px] font-medium text-foreground">
+                  {extractionQuality != null ? `${extractionQuality}%` : "--"}
                 </span>
               </div>
             </div>

@@ -35,6 +35,11 @@ const navigation = [
     href: "/harvest",
     emoji: "\uD83D\uDE9C",
   },
+  {
+    label: "Events",
+    href: "/events",
+    emoji: "\uD83D\uDCCB",
+  },
 ];
 
 const bottomNavigation = [

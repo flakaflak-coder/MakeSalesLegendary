@@ -124,9 +124,10 @@ export default function ScoringTunerPage() {
       setLoading(true);
       setError(null);
       try {
+        const pid = selectedProfileId!;
         const [leadsRes, configRes] = await Promise.all([
-          getLeads({ profileId: selectedProfileId, limit: 500 }),
-          getScoringConfig(selectedProfileId),
+          getLeads({ profileId: pid, limit: 500 }),
+          getScoringConfig(pid),
         ]);
         if (cancelled) return;
         setLeads(leadsRes);
@@ -226,7 +227,7 @@ export default function ScoringTunerPage() {
         }
       }
 
-      const updated = await updateScoringConfig(selectedProfileId, {
+      const updated = await updateScoringConfig(selectedProfileId!, {
         fit_weight: fitWeight,
         timing_weight: timingWeight,
         fit_criteria: updatedFitCriteria,

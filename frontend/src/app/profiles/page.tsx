@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/mock-data";
 import { salesGifs } from "@/lib/sales-gifs";
@@ -11,19 +11,40 @@ import {
   Settings,
   ChevronRight,
   Zap,
+  X,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import {
+  createProfile,
   getHarvestRuns,
   getLeads,
   getProfiles,
   getScoringConfig,
   triggerHarvest,
+  ApiError,
   type ApiHarvestRun,
   type ApiLeadListItem,
   type ApiProfile,
   type ApiScoringConfig,
 } from "@/lib/api";
+
+/* ── Types for the New Profile form ───────────────────────── */
+
+interface SearchTermEntry {
+  id: string;
+  term: string;
+  language: "nl" | "en";
+  priority: "primary" | "secondary" | "seniority_signals";
+}
+
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
 export default function ProfilesPage() {
   const [profiles, setProfiles] = useState<ApiProfile[]>([]);
@@ -33,6 +54,137 @@ export default function ProfilesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState<number | null>(null);
+
+  /* ── New Profile Modal state ─────────────────────────────── */
+  const [modalOpen, setModalOpen] = useState(false);
+  const [formName, setFormName] = useState("");
+  const [formSlug, setFormSlug] = useState("");
+  const [slugTouched, setSlugTouched] = useState(false);
+  const [formDescription, setFormDescription] = useState("");
+  const [formTerms, setFormTerms] = useState<SearchTermEntry[]>([]);
+  const [formSubmitting, setFormSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  const resetForm = useCallback(() => {
+    setFormName("");
+    setFormSlug("");
+    setSlugTouched(false);
+    setFormDescription("");
+    setFormTerms([]);
+    setFormError(null);
+    setFormSubmitting(false);
+  }, []);
+
+  function openModal() {
+    resetForm();
+    setModalOpen(true);
+  }
+
+  function closeModal() {
+    if (formSubmitting) return;
+    setModalOpen(false);
+  }
+
+  function handleNameChange(value: string) {
+    setFormName(value);
+    if (!slugTouched) {
+      setFormSlug(generateSlug(value));
+    }
+  }
+
+  function addSearchTerm() {
+    setFormTerms((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), term: "", language: "nl", priority: "primary" },
+    ]);
+  }
+
+  function removeSearchTerm(id: string) {
+    setFormTerms((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  function updateSearchTerm(id: string, field: keyof SearchTermEntry, value: string) {
+    setFormTerms((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, [field]: value } : t))
+    );
+  }
+
+  async function handleCreateProfile(e: React.FormEvent) {
+    e.preventDefault();
+    setFormError(null);
+
+    const trimmedName = formName.trim();
+    const trimmedSlug = formSlug.trim();
+
+    if (!trimmedName) {
+      setFormError("Name is required.");
+      return;
+    }
+    if (!trimmedSlug) {
+      setFormError("Slug is required.");
+      return;
+    }
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(trimmedSlug)) {
+      setFormError("Slug must be lowercase alphanumeric with hyphens only (e.g. \"accounts-payable\").");
+      return;
+    }
+
+    const validTerms = formTerms.filter((t) => t.term.trim() !== "");
+
+    setFormSubmitting(true);
+    try {
+      await createProfile({
+        name: trimmedName,
+        slug: trimmedSlug,
+        description: formDescription.trim() || undefined,
+        search_terms: validTerms.length > 0
+          ? validTerms.map((t) => ({
+              term: t.term.trim(),
+              language: t.language,
+              priority: t.priority,
+            }))
+          : undefined,
+      });
+
+      setModalOpen(false);
+
+      // Refresh profiles list
+      const refreshed = await getProfiles();
+      setProfiles(refreshed);
+
+      // Fetch scoring configs for any new profiles
+      const configEntries = await Promise.all(
+        refreshed.map(async (profile) => {
+          try {
+            const cfg = await getScoringConfig(profile.id);
+            return [profile.id, cfg] as const;
+          } catch {
+            return [profile.id, null] as const;
+          }
+        })
+      );
+      setScoringConfigs(Object.fromEntries(configEntries));
+    } catch (err) {
+      if (err instanceof ApiError) {
+        // Try to extract a meaningful message from the API error body
+        let message = `Request failed (${err.status})`;
+        if (err.body) {
+          try {
+            const parsed = JSON.parse(err.body);
+            message = parsed.detail ?? parsed.message ?? message;
+          } catch {
+            message = err.body;
+          }
+        }
+        setFormError(message);
+      } else {
+        setFormError(err instanceof Error ? err.message : "Failed to create profile.");
+      }
+    } finally {
+      setFormSubmitting(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -121,7 +273,10 @@ export default function ProfilesPage() {
           </p>
         </div>
 
-        <button className="flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-[13px] font-medium text-accent-foreground transition-all duration-100 hover:bg-accent-hover active:scale-[0.97]">
+        <button
+          onClick={openModal}
+          className="flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-[13px] font-medium text-accent-foreground transition-all duration-100 hover:bg-accent-hover active:scale-[0.97]"
+        >
           <Plus className="h-4 w-4" />
           New Profile
         </button>
@@ -352,7 +507,7 @@ export default function ProfilesPage() {
             <div className="hidden overflow-hidden rounded-lg border border-border-subtle lg:block">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={salesGifs.profiles[0]}
+                src={salesGifs.hustle[0]}
                 alt="Profiles"
                 className="h-28 w-40 object-cover"
                 onError={(e) => {
@@ -363,6 +518,228 @@ export default function ProfilesPage() {
           </div>
         </div>
       </section>
+
+      {/* ── New Profile Modal ─────────────────────────────── */}
+      {modalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="new-profile-title"
+        >
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-sand-950/40 backdrop-blur-sm"
+            onClick={closeModal}
+          />
+
+          {/* Modal panel */}
+          <div
+            ref={modalRef}
+            className="relative z-10 mx-4 w-full max-w-lg overflow-hidden rounded-lg border border-border bg-background-card shadow-xl"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-border-subtle px-6 py-4">
+              <h2
+                id="new-profile-title"
+                className="text-[16px] font-semibold text-foreground"
+              >
+                New Search Profile
+              </h2>
+              <button
+                onClick={closeModal}
+                disabled={formSubmitting}
+                className="rounded-md p-1 text-foreground-muted transition-colors hover:bg-background-hover hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleCreateProfile}>
+              <div className="max-h-[65vh] space-y-5 overflow-y-auto px-6 py-5">
+                {/* Error display */}
+                {formError && (
+                  <div className="rounded-md border border-danger/20 bg-danger/10 px-4 py-3 text-[13px] text-danger">
+                    {formError}
+                  </div>
+                )}
+
+                {/* Name */}
+                <div>
+                  <label
+                    htmlFor="profile-name"
+                    className="mb-1.5 block text-[13px] font-medium text-foreground"
+                  >
+                    Name <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    id="profile-name"
+                    type="text"
+                    required
+                    value={formName}
+                    onChange={(e) => handleNameChange(e.target.value)}
+                    placeholder="e.g. Accounts Payable"
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-foreground-faint transition-colors focus:border-accent focus:outline-none"
+                  />
+                </div>
+
+                {/* Slug */}
+                <div>
+                  <label
+                    htmlFor="profile-slug"
+                    className="mb-1.5 block text-[13px] font-medium text-foreground"
+                  >
+                    Slug <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    id="profile-slug"
+                    type="text"
+                    required
+                    value={formSlug}
+                    onChange={(e) => {
+                      setSlugTouched(true);
+                      setFormSlug(e.target.value);
+                    }}
+                    placeholder="e.g. accounts-payable"
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-[13px] text-foreground placeholder:text-foreground-faint transition-colors focus:border-accent focus:outline-none"
+                  />
+                  <p className="mt-1 text-[11px] text-foreground-muted">
+                    Auto-generated from the name. Used in URLs and API calls.
+                  </p>
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label
+                    htmlFor="profile-description"
+                    className="mb-1.5 block text-[13px] font-medium text-foreground"
+                  >
+                    Description
+                  </label>
+                  <textarea
+                    id="profile-description"
+                    value={formDescription}
+                    onChange={(e) => setFormDescription(e.target.value)}
+                    placeholder="What digital employee type does this profile target?"
+                    rows={3}
+                    className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-foreground-faint transition-colors focus:border-accent focus:outline-none"
+                  />
+                </div>
+
+                {/* Search Terms */}
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <label className="text-[13px] font-medium text-foreground">
+                      Search Terms
+                    </label>
+                    <button
+                      type="button"
+                      onClick={addSearchTerm}
+                      className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-foreground-secondary transition-colors hover:bg-background-hover"
+                    >
+                      <Plus className="h-3 w-3" />
+                      Add Term
+                    </button>
+                  </div>
+
+                  {formTerms.length === 0 ? (
+                    <p className="rounded-md border border-dashed border-border-subtle px-4 py-3 text-center text-[12px] text-foreground-muted">
+                      No search terms yet. Add terms to tell the harvester what to look for.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {formTerms.map((entry) => (
+                        <div
+                          key={entry.id}
+                          className="flex items-center gap-2 rounded-md border border-border-subtle bg-background-sunken p-2"
+                        >
+                          {/* Term text */}
+                          <input
+                            type="text"
+                            value={entry.term}
+                            onChange={(e) =>
+                              updateSearchTerm(entry.id, "term", e.target.value)
+                            }
+                            placeholder="Search term..."
+                            className="min-w-0 flex-1 rounded border border-border bg-background-card px-2 py-1.5 text-[12px] text-foreground placeholder:text-foreground-faint focus:border-accent focus:outline-none"
+                          />
+
+                          {/* Language */}
+                          <select
+                            value={entry.language}
+                            onChange={(e) =>
+                              updateSearchTerm(entry.id, "language", e.target.value)
+                            }
+                            className="rounded border border-border bg-background-card px-2 py-1.5 text-[12px] text-foreground focus:border-accent focus:outline-none"
+                          >
+                            <option value="nl">NL</option>
+                            <option value="en">EN</option>
+                          </select>
+
+                          {/* Priority */}
+                          <select
+                            value={entry.priority}
+                            onChange={(e) =>
+                              updateSearchTerm(entry.id, "priority", e.target.value)
+                            }
+                            className="rounded border border-border bg-background-card px-2 py-1.5 text-[12px] text-foreground focus:border-accent focus:outline-none"
+                          >
+                            <option value="primary">Primary</option>
+                            <option value="secondary">Secondary</option>
+                            <option value="seniority_signals">Seniority</option>
+                          </select>
+
+                          {/* Remove */}
+                          <button
+                            type="button"
+                            onClick={() => removeSearchTerm(entry.id)}
+                            className="shrink-0 rounded p-1 text-foreground-muted transition-colors hover:bg-danger/10 hover:text-danger"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-3 border-t border-border-subtle px-6 py-4">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  disabled={formSubmitting}
+                  className="rounded-md border border-border px-4 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-background-hover disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={formSubmitting}
+                  className={cn(
+                    "flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-[13px] font-medium text-accent-foreground transition-all duration-100 hover:bg-accent-hover active:scale-[0.97]",
+                    formSubmitting && "cursor-not-allowed opacity-70"
+                  )}
+                >
+                  {formSubmitting ? (
+                    <>
+                      <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-accent-foreground/30 border-t-accent-foreground" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4" />
+                      Create Profile
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

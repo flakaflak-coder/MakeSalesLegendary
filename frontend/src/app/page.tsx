@@ -21,13 +21,11 @@ import {
 import { salesGifs, getRandomQuote } from "@/lib/sales-gifs";
 import {
   getAnalyticsFunnel,
-  getAnalyticsOverview,
   getHarvestRuns,
   getLeadStats,
   getLeads,
   getProfiles,
   type ApiAnalyticsFunnel,
-  type ApiAnalyticsOverview,
   type ApiHarvestRun,
   type ApiLeadListItem,
   type ApiLeadStats,
@@ -38,38 +36,72 @@ export default function DashboardPage() {
   const quote = useMemo(() => getRandomQuote(), []);
 
   const [leads, setLeads] = useState<ApiLeadListItem[]>([]);
+  const [allLeads, setAllLeads] = useState<ApiLeadListItem[]>([]);
   const [leadStats, setLeadStats] = useState<ApiLeadStats | null>(null);
   const [funnel, setFunnel] = useState<ApiAnalyticsFunnel | null>(null);
-  const [overview, setOverview] = useState<ApiAnalyticsOverview | null>(null);
   const [harvestRuns, setHarvestRuns] = useState<ApiHarvestRun[]>([]);
+  const [allHarvestRuns, setAllHarvestRuns] = useState<ApiHarvestRun[]>([]);
   const [profiles, setProfiles] = useState<ApiProfile[]>([]);
+  const [selectedProfileId, setSelectedProfileId] = useState<number | null>(
+    null
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function load() {
+    async function loadProfiles() {
+      try {
+        const [profilesRes, allLeadsRes, allRuns] = await Promise.all([
+          getProfiles(),
+          getLeads({ limit: 500 }),
+          getHarvestRuns(),
+        ]);
+        if (cancelled) return;
+        setProfiles(profilesRes);
+        setAllLeads(allLeadsRes);
+        setAllHarvestRuns(allRuns);
+        setSelectedProfileId((prev) => prev ?? profilesRes[0]?.id ?? null);
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Failed to load profiles");
+      }
+    }
+
+    loadProfiles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedProfileId) return;
+    let cancelled = false;
+
+    async function loadProfileData() {
       setLoading(true);
       setError(null);
       try {
-        const [leadList, stats, funnelRes, overviewRes, runs, profilesRes] =
-          await Promise.all([
-            getLeads({ limit: 200, sortBy: "composite_score", sortOrder: "desc" }),
-            getLeadStats(),
-            getAnalyticsFunnel(),
-            getAnalyticsOverview(),
-            getHarvestRuns(),
-            getProfiles(),
-          ]);
+        const pid = selectedProfileId ?? undefined;
+        const [leadList, stats, funnelRes, runs] = await Promise.all([
+          getLeads({
+            profileId: pid,
+            limit: 200,
+            sortBy: "composite_score",
+            sortOrder: "desc",
+          }),
+          getLeadStats(pid),
+          getAnalyticsFunnel(pid),
+          getHarvestRuns(pid),
+        ]);
 
         if (cancelled) return;
         setLeads(leadList);
         setLeadStats(stats);
         setFunnel(funnelRes);
-        setOverview(overviewRes);
         setHarvestRuns(runs);
-        setProfiles(profilesRes);
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : "Failed to load data");
@@ -78,12 +110,12 @@ export default function DashboardPage() {
       }
     }
 
-    load();
+    loadProfileData();
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selectedProfileId]);
 
   const hotLeads = useMemo(
     () => leads.filter((l) => l.status === "hot"),
@@ -112,27 +144,30 @@ export default function DashboardPage() {
   const conversionRate = funnelCounts.contacted
     ? Math.round((funnelCounts.converted / funnelCounts.contacted) * 100)
     : 0;
+  const companiesTracked = useMemo(() => {
+    return new Set(leads.map((lead) => lead.company_id)).size;
+  }, [leads]);
 
   const profileLeadCounts = useMemo(() => {
     const counts = new Map<number, { total: number; hot: number }>();
-    for (const lead of leads) {
+    for (const lead of allLeads) {
       const current = counts.get(lead.search_profile_id) ?? { total: 0, hot: 0 };
       current.total += 1;
       if (lead.status === "hot") current.hot += 1;
       counts.set(lead.search_profile_id, current);
     }
     return counts;
-  }, [leads]);
+  }, [allLeads]);
 
   const harvestByProfile = useMemo(() => {
     const map = new Map<number, ApiHarvestRun>();
-    for (const run of harvestRuns) {
+    for (const run of allHarvestRuns) {
       if (!map.has(run.profile_id)) {
         map.set(run.profile_id, run);
       }
     }
     return map;
-  }, [harvestRuns]);
+  }, [allHarvestRuns]);
 
   const profileNameById = useMemo(() => {
     const map = new Map<number, string>();
@@ -154,6 +189,22 @@ export default function DashboardPage() {
             {hotLeads.length} hot leads waiting. {" "}
             {lastHarvest?.vacancies_new ?? 0} new vacancies since last harvest.
           </p>
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-foreground-muted">
+              Profile
+            </span>
+            <select
+              value={selectedProfileId ?? ""}
+              onChange={(e) => setSelectedProfileId(Number(e.target.value))}
+              className="rounded-md border border-border bg-background-card px-3 py-1.5 text-[13px] font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30"
+            >
+              {profiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="hidden lg:block">
           <div className="relative overflow-hidden rounded-lg border border-border-subtle">
@@ -201,8 +252,8 @@ export default function DashboardPage() {
         <StatCard
           emoji={"\uD83C\uDFE2"}
           label="Companies Tracked"
-          value={String(overview?.companies ?? 0)}
-          change="Live total"
+          value={String(companiesTracked)}
+          change="Profile scope"
           trend="up"
         />
         <StatCard

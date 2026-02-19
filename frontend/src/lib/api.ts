@@ -203,6 +203,15 @@ export interface ApiProfile {
   updated_at: string;
 }
 
+export interface ApiEventLog {
+  id: number;
+  event_type: string;
+  entity_type: string;
+  entity_id: number | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
 export interface ApiScoringConfig {
   id: number;
   profile_id: number;
@@ -302,6 +311,23 @@ export async function getProfiles(): Promise<ApiProfile[]> {
   return apiFetch<ApiProfile[]>(`/api/profiles`);
 }
 
+export async function getEvents(params?: {
+  eventType?: string;
+  entityType?: string;
+  entityId?: number;
+  limit?: number;
+  offset?: number;
+}): Promise<ApiEventLog[]> {
+  const qs = new URLSearchParams();
+  if (params?.eventType) qs.set("event_type", params.eventType);
+  if (params?.entityType) qs.set("entity_type", params.entityType);
+  if (params?.entityId != null) qs.set("entity_id", String(params.entityId));
+  if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.offset) qs.set("offset", String(params.offset));
+  const suffix = qs.toString();
+  return apiFetch<ApiEventLog[]>(`/api/events${suffix ? `?${suffix}` : ""}`);
+}
+
 export async function getScoringConfig(
   profileId: number
 ): Promise<ApiScoringConfig> {
@@ -349,5 +375,96 @@ export async function createLeadFeedback(
   return apiFetch(`/api/leads/${leadId}/feedback`, {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+// --- Profile CRUD ---
+
+export async function getProfile(id: number): Promise<ApiProfile> {
+  return apiFetch<ApiProfile>(`/api/profiles/${id}`);
+}
+
+export async function createProfile(payload: {
+  name: string;
+  slug: string;
+  description?: string;
+  search_terms?: Array<{ term: string; language?: string; priority?: string; category?: string }>;
+}): Promise<ApiProfile> {
+  return apiFetch<ApiProfile>(`/api/profiles`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateProfile(
+  id: number,
+  payload: {
+    name?: string;
+    slug?: string;
+    description?: string;
+    search_terms?: Array<{ term: string; language?: string; priority?: string; category?: string }>;
+  }
+): Promise<ApiProfile> {
+  return apiFetch<ApiProfile>(`/api/profiles/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+// --- Extraction Prompts ---
+
+export interface ApiExtractionPrompt {
+  id: number;
+  profile_id: number;
+  version: number;
+  system_prompt: string;
+  extraction_schema: Record<string, string>;
+  is_active: boolean;
+  notes: string | null;
+  created_at: string;
+}
+
+export async function getExtractionPrompts(
+  profileId: number
+): Promise<ApiExtractionPrompt[]> {
+  return apiFetch<ApiExtractionPrompt[]>(
+    `/api/enrichment/profiles/${profileId}/prompts`
+  );
+}
+
+export async function getActiveExtractionPrompt(
+  profileId: number
+): Promise<ApiExtractionPrompt> {
+  return apiFetch<ApiExtractionPrompt>(
+    `/api/enrichment/profiles/${profileId}/prompts/active`
+  );
+}
+
+export async function createExtractionPrompt(
+  profileId: number,
+  payload: {
+    system_prompt: string;
+    extraction_schema: Record<string, string>;
+    notes?: string;
+  }
+): Promise<ApiExtractionPrompt> {
+  return apiFetch<ApiExtractionPrompt>(
+    `/api/enrichment/profiles/${profileId}/prompts`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+// --- Enrichment ---
+
+export async function triggerEnrichment(
+  profileId: number,
+  passType: string = "both"
+): Promise<{ status: string; task_id: string; profile_id: number; pass_type: string }> {
+  return apiFetch(`/api/enrichment/trigger`, {
+    method: "POST",
+    body: JSON.stringify({ profile_id: profileId, pass_type: passType }),
   });
 }
