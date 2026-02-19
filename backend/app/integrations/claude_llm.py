@@ -1,7 +1,11 @@
+import hashlib
 import logging
 from dataclasses import dataclass, field
 
 import anthropic
+
+from app.config import settings
+from app.utils.api_cache import cache_get, cache_put
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +65,22 @@ class ClaudeLLMClient:
         system_prompt: str,
     ) -> ExtractionResult:
         """Extract structured data from vacancy text using Claude tool_use."""
+        # Check cache — keyed on text hash + schema so same vacancy isn't extracted twice
+        text_hash = hashlib.sha256(vacancy_text.encode()).hexdigest()[:16]
+        cache_params = {"text_hash": text_hash, "schema_keys": sorted(extraction_schema.keys())}
+
+        if settings.api_cache_enabled:
+            cached = cache_get("claude_llm", cache_params, max_age_days=0)  # LLM cache never expires
+            if cached is not None:
+                logger.info("LLM cache hit: text_hash=%s", text_hash)
+                return ExtractionResult(
+                    extracted_data=cached.get("extracted_data", {}),
+                    tokens_input=cached.get("tokens_input", 0),
+                    tokens_output=cached.get("tokens_output", 0),
+                    model=cached.get("model", self.model),
+                    success=True,
+                )
+
         tool = self._build_extraction_tool(extraction_schema)
 
         logger.info(
@@ -115,10 +135,20 @@ class ClaudeLLMClient:
             sum(1 for v in extracted_data.values() if v is not None),
         )
 
-        return ExtractionResult(
+        result = ExtractionResult(
             extracted_data=extracted_data,
             tokens_input=response.usage.input_tokens,
             tokens_output=response.usage.output_tokens,
             model=self.model,
             success=True,
         )
+
+        if settings.api_cache_enabled:
+            cache_put("claude_llm", cache_params, {
+                "extracted_data": extracted_data,
+                "tokens_input": response.usage.input_tokens,
+                "tokens_output": response.usage.output_tokens,
+                "model": self.model,
+            })
+
+        return result

@@ -2,6 +2,10 @@ import logging
 from dataclasses import dataclass, field
 
 import httpx
+import os
+
+from app.config import settings
+from app.utils.api_cache import cache_get, cache_put
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +39,21 @@ class KvKClient:
 
     async def search_by_name(self, company_name: str) -> list[dict]:
         """Search KvK by company name. Returns raw result list."""
+        cache_params = {"action": "search", "name": company_name}
+
+        if self._cache_enabled():
+            cached = cache_get("kvk", cache_params, settings.api_cache_max_age_days)
+            if cached is not None:
+                logger.info("KvK cache hit: search %r", company_name)
+                return cached.get("resultaten", [])
+
         try:
             data = await self._get(
                 f"{self.base_url}/api/v2/zoeken",
                 params={"naam": company_name, "pagina": 1, "resultatenPerPagina": 10},
             )
+            if self._cache_enabled():
+                cache_put("kvk", cache_params, data)
             return data.get("resultaten", [])
         except Exception as exc:
             logger.error("KvK search failed for %r: %s", company_name, exc)
@@ -54,15 +68,36 @@ class KvKClient:
 
     async def get_company_profile(self, kvk_number: str) -> KvKCompanyData | None:
         """Get full company profile by KvK number."""
+        cache_params = {"action": "profile", "kvk_number": kvk_number}
+
+        if self._cache_enabled():
+            cached = cache_get("kvk", cache_params, settings.api_cache_max_age_days)
+            if cached is not None:
+                logger.info("KvK cache hit: profile %s", kvk_number)
+                data = cached
+                return self._parse_profile(kvk_number, data)
+
         try:
             data = await self._get(
                 f"{self.base_url}/api/v1/basisprofielen/{kvk_number}"
             )
+            if self._cache_enabled():
+                cache_put("kvk", cache_params, data)
         except Exception as exc:
             logger.error("KvK profile fetch failed for %s: %s", kvk_number, exc)
             return None
 
-        # Parse SBI codes
+        return self._parse_profile(kvk_number, data)
+
+    @staticmethod
+    def _cache_enabled() -> bool:
+        if not settings.api_cache_enabled:
+            return False
+        return "PYTEST_CURRENT_TEST" not in os.environ
+
+    @staticmethod
+    def _parse_profile(kvk_number: str, data: dict) -> KvKCompanyData:
+        """Parse a KvK profile response into a KvKCompanyData object."""
         sbi_codes = []
         for sbi in data.get("spiIds", []):
             sbi_codes.append(
@@ -72,7 +107,6 @@ class KvKClient:
                 }
             )
 
-        # Count entities (vestigingen)
         entity_count = len(data.get("vestigingen", []))
 
         return KvKCompanyData(

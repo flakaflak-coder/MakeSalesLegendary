@@ -6,8 +6,12 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.ext.compiler import compiles
 
+from app.config import settings
 from app.database import Base, get_db
 from app.main import app
+
+# Disable file-based API cache during tests to prevent cross-test interference
+settings.api_cache_enabled = False
 
 
 @compiles(JSONB, "sqlite")

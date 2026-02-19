@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     scoring_warm_threshold: int = 50
     kvk_api_base_url: str = "https://api.kvk.nl/api/v2"
     apollo_api_base_url: str = "https://api.apollo.io/api/v1"
+    api_cache_enabled: bool = True
+    api_cache_max_age_days: int = 30
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

@@ -3,6 +3,9 @@ from dataclasses import dataclass
 
 import httpx
 
+from app.config import settings
+from app.utils.api_cache import cache_get, cache_put
+
 logger = logging.getLogger(__name__)
 
 SERPAPI_BASE_URL = "https://serpapi.com/search"
@@ -28,6 +31,14 @@ class SerpApiHarvester:
         self, query: str, location: str = "Netherlands"
     ) -> list[SerpApiResult]:
         """Search Google Jobs via SerpAPI for a given query string."""
+        cache_params = {"query": query, "location": location}
+
+        if settings.api_cache_enabled:
+            cached = cache_get("serpapi", cache_params, settings.api_cache_max_age_days)
+            if cached is not None:
+                logger.info("SerpAPI cache hit: query=%r", query)
+                return self.parse_response(cached)
+
         params = {
             "engine": "google_jobs",
             "q": query,
@@ -41,6 +52,9 @@ class SerpApiHarvester:
             response = await client.get(SERPAPI_BASE_URL, params=params)
             response.raise_for_status()
             data = response.json()
+
+        if settings.api_cache_enabled:
+            cache_put("serpapi", cache_params, data)
 
         results = self.parse_response(data)
         logger.info("SerpAPI returned %d results for query=%r", len(results), query)

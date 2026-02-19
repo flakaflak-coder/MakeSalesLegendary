@@ -3,6 +3,9 @@ from dataclasses import dataclass, field
 
 import httpx
 
+from app.config import settings
+from app.utils.api_cache import cache_get, cache_put
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,12 +42,28 @@ class CompanyInfoClient:
 
     async def get_company_data(self, kvk_number: str) -> CompanyFinancialData | None:
         """Get company financial and business data by KvK number."""
+        cache_params = {"kvk_number": kvk_number}
+
+        if settings.api_cache_enabled:
+            cached = cache_get(
+                "company_info", cache_params, settings.api_cache_max_age_days
+            )
+            if cached is not None:
+                logger.info("Company.info cache hit: %s", kvk_number)
+                return self._parse_response(kvk_number, cached)
+
         try:
             data = await self._get(f"{self.base_url}/api/v1/companies/{kvk_number}")
+            if settings.api_cache_enabled:
+                cache_put("company_info", cache_params, data)
         except Exception as exc:
             logger.error("Company.info fetch failed for KvK %s: %s", kvk_number, exc)
             return None
 
+        return self._parse_response(kvk_number, data)
+
+    @staticmethod
+    def _parse_response(kvk_number: str, data: dict) -> CompanyFinancialData:
         return CompanyFinancialData(
             kvk_number=kvk_number,
             employee_count=data.get("employeeCount"),
