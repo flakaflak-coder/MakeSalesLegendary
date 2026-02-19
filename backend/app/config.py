@@ -2,7 +2,9 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    database_url: str = "postgresql+asyncpg://signal:signal@localhost:5432/signal_engine"
+    database_url: str = (
+        "postgresql+asyncpg://signal:signal@localhost:5432/signal_engine"
+    )
     database_url_sync: str = "postgresql://signal:signal@localhost:5432/signal_engine"
     redis_url: str = "redis://localhost:6379/0"
     serpapi_key: str = ""
