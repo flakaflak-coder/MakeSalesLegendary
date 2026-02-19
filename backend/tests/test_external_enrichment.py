@@ -4,6 +4,7 @@ import pytest
 
 from app.integrations.apollo import ApolloCompanyData
 from app.integrations.kvk import KvKCompanyData
+from app.integrations.openkvk import OpenKvKData
 from app.models.company import Company
 from app.models.profile import SearchProfile
 from app.models.vacancy import Vacancy
@@ -55,14 +56,24 @@ async def test_enrich_qualifying_companies(db_session):
         raw_data={"id": "org_abc123", "name": "Acme B.V."},
     )
 
+    mock_openkvk = OpenKvKData(
+        kvk_number="12345678",
+        active=True,
+        legal_form="BV",
+        sbi_codes=[{"code": "6201", "type": "hoofd"}],
+        raw_data={"actief": "J", "rechtsvormCode": "BV"},
+    )
+
     service = ExternalEnrichmentService(db=db_session)
 
     with (
         patch.object(service, "_kvk_client", create=True) as mock_kvk_client,
+        patch.object(service, "_openkvk_client", create=True) as mock_openkvk_client,
         patch.object(service, "_apollo_client", create=True) as mock_apollo_client,
     ):
         mock_kvk_client.find_kvk_number = AsyncMock(return_value="12345678")
         mock_kvk_client.get_company_profile = AsyncMock(return_value=mock_kvk)
+        mock_openkvk_client.get_company = AsyncMock(return_value=mock_openkvk)
         mock_apollo_client.enrich_company = AsyncMock(return_value=mock_apollo)
 
         run = await service.run_external_enrichment(profile_id=profile.id)
@@ -73,11 +84,17 @@ async def test_enrich_qualifying_companies(db_session):
 
     await db_session.refresh(company)
     assert company.kvk_number == "12345678"
+    # Paid KvK API overrides SBI codes from OpenKVK
     assert company.sbi_codes == [{"code": "6201", "description": "Software"}]
     assert company.employee_range == "100-199"
     assert company.entity_count == 3
     assert company.enrichment_status == "completed"
     assert company.enriched_at is not None
+    # OpenKVK data should be stored in enrichment_data blob
+    assert company.enrichment_data["openkvk_data"] == {
+        "actief": "J",
+        "rechtsvormCode": "BV",
+    }
 
 
 @pytest.mark.asyncio
@@ -179,9 +196,11 @@ async def test_enrich_handles_kvk_failure(db_session):
     service = ExternalEnrichmentService(db=db_session)
     with (
         patch.object(service, "_kvk_client", create=True) as mock_kvk_client,
+        patch.object(service, "_openkvk_client", create=True) as mock_openkvk_client,
         patch.object(service, "_apollo_client", create=True) as mock_apollo_client,
     ):
         mock_kvk_client.find_kvk_number = AsyncMock(return_value=None)
+        mock_openkvk_client.get_company = AsyncMock(return_value=None)
         mock_apollo_client.enrich_company = AsyncMock(return_value=None)
 
         run = await service.run_external_enrichment(profile_id=profile.id)
@@ -189,6 +208,8 @@ async def test_enrich_handles_kvk_failure(db_session):
     # Partial failure -- KvK not found, but run still completes
     assert run.status == "completed"
     assert run.items_processed == 1
+    # OpenKVK should not have been called (no KvK number found)
+    mock_openkvk_client.get_company.assert_not_called()
     # Company is enriched with whatever we got (nothing in this case)
     await db_session.refresh(company)
     assert company.enrichment_status == "completed"
