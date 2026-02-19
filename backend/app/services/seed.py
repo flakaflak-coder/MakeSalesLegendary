@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.extraction_prompt import ExtractionPrompt
 from app.models.profile import SearchProfile, SearchTerm
 
 logger = logging.getLogger(__name__)
@@ -58,4 +59,19 @@ async def seed_profile(db: AsyncSession, profile_name: str) -> SearchProfile:
     await db.refresh(profile, ["search_terms"])
 
     logger.info("Seeded profile '%s' with %d search terms.", profile.slug, len(terms))
+
+    # Seed extraction prompt if extraction config present
+    if "extraction" in profile_data:
+        extraction_config = profile_data["extraction"]
+        prompt = ExtractionPrompt(
+            profile_id=profile.id,
+            version=1,
+            system_prompt=extraction_config["system_prompt"],
+            extraction_schema=extraction_config["schema"],
+            is_active=True,
+            notes="Seeded from YAML",
+        )
+        db.add(prompt)
+        await db.commit()
+
     return profile

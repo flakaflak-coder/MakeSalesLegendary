@@ -31,3 +31,23 @@ profile:
         language: "en"
       - term: "hoofd financiële administratie"
         language: "nl"
+
+  extraction:
+    system_prompt: |
+      You are an expert at extracting structured data from Dutch and English job vacancy texts.
+      Focus on identifying specific tools, systems, team sizes, and operational details.
+      Return null for any field where the information is not clearly stated in the text.
+      Do not guess or infer -- only extract what is explicitly mentioned.
+    schema:
+      erp_systems: "Which ERP systems are mentioned? Return as a list. (SAP, Oracle, Exact, Exact Online, AFAS, Unit4, Microsoft Dynamics, Visma, Twinfield, etc.)"
+      p2p_tools: "Which P2P/AP automation tools are mentioned? Return as a list. (Basware, Coupa, Tradeshift, Medius, Tungsten, ReadSoft, Kofax, etc.)"
+      team_size: "Any indication of team size? Return as a string, e.g. '5 medewerkers' or '10-15 FTE'."
+      volume_indicators: "Any mention of invoice volumes, transaction counts, or throughput? e.g. '15.000 facturen per jaar'."
+      complexity_signals: "International operations, multiple entities, languages, or multi-country? Return as a string summary."
+      automation_status: "Current level of automation mentioned? e.g. 'manual processing', 'partially automated', 'using OCR'."
+
+  negative_signals:
+    - "implementatie van Basware"
+    - "migratie naar Coupa"
+    - "Tradeshift implementatie"
+    - "RPA developer"
