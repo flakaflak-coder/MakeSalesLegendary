@@ -410,3 +410,7 @@ MakeSalesLegendary/
 - Added analytics integrations for funnel, term performance, scoring accuracy, and harvest summaries, plus scoring config updates and on-demand scoring runs.
 - Ran backend ruff and pytest; fixed Apollo enrichment behavior, default minimum filters, and import ordering to get a clean test run.
 - Fixed frontend lint errors (unused imports and explicit any types) and re-ran eslint cleanly.
+- Made dashboard and lead board explicitly profile-scoped with selectors and per-profile API queries.
+- Added event logging for harvest/enrichment/scoring triggers and lead status/feedback actions.
+- Exposed enrichment status and extraction quality in lead list/detail to handle partial data gracefully.
+- Added Event Log API and UI page to browse audit events; wired sidebar navigation.

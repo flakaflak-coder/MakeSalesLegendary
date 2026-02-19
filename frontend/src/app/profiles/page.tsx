@@ -397,7 +397,7 @@ export default function ProfilesPage() {
 
                   <div className="flex items-center justify-between border-t border-border-subtle pt-4">
                     <Link
-                      href={`/profiles/${profile.slug}`}
+                      href={`/profiles/${profile.id}`}
                       className="group/link flex items-center gap-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
                     >
                       <Settings className="h-3.5 w-3.5" />

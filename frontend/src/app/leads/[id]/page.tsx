@@ -229,6 +229,7 @@ export default function LeadDetailPage({
     new Set()
   );
   const [feedbackAction, setFeedbackAction] = useState<string>("");
+  const [feedbackReason, setFeedbackReason] = useState("");
   const [feedbackNotes, setFeedbackNotes] = useState("");
   const [feedbackPending, setFeedbackPending] = useState(false);
   const [dismissPending, setDismissPending] = useState(false);
@@ -440,11 +441,13 @@ export default function LeadDetailPage({
     try {
       await createLeadFeedback(lead.id, {
         action: feedbackAction,
+        reason: feedbackReason || undefined,
         notes: feedbackNotes || undefined,
       });
       const updated = await getLead(lead.id);
       setLead(updated);
       setFeedbackAction("");
+      setFeedbackReason("");
       setFeedbackNotes("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit feedback");
@@ -923,6 +926,14 @@ export default function LeadDetailPage({
                   </select>
                   <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground-faint" />
                 </div>
+                <input
+                  type="text"
+                  value={feedbackReason}
+                  onChange={(e) => setFeedbackReason(e.target.value)}
+                  placeholder="Reason (e.g. wrong ICP, already using automation, ...)"
+                  aria-label="Feedback reason"
+                  className="w-full rounded-md border border-border bg-background-card px-3 py-2 text-[13px] text-foreground placeholder:text-foreground-faint transition-colors focus:border-accent focus:outline-none"
+                />
                 <textarea
                   value={feedbackNotes}
                   onChange={(e) => setFeedbackNotes(e.target.value)}

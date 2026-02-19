@@ -1,8 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+import app.models  # noqa: F401
 from app.api.analytics import router as analytics_router
+from app.api.chat import router as chat_router
 from app.api.enrichment import router as enrichment_router
+from app.api.events import router as events_router
 from app.api.harvest import router as harvest_router
 from app.api.leads import router as leads_router
 from app.api.profiles import router as profiles_router
@@ -28,6 +31,8 @@ app.include_router(enrichment_router)
 app.include_router(leads_router)
 app.include_router(analytics_router)
 app.include_router(scoring_router)
+app.include_router(events_router)
+app.include_router(chat_router)
 
 
 @app.get("/health")

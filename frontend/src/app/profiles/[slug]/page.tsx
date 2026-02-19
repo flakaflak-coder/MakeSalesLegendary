@@ -576,7 +576,8 @@ export default function ProfileDetailPage({
           </button>
           <button
             onClick={handleTriggerEnrichment}
-            disabled={enrichmentLoading}
+            disabled={enrichmentLoading || !activePrompt}
+            title={!activePrompt ? "Configure an extraction prompt first" : undefined}
             className="inline-flex items-center gap-2 rounded-md border border-stone-300 bg-stone-50 px-4 py-2 text-[13px] font-medium text-stone-700 transition-colors hover:bg-stone-100 disabled:opacity-50"
           >
             {enrichmentLoading ? (

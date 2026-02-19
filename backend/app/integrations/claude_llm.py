@@ -65,12 +65,18 @@ class ClaudeLLMClient:
         system_prompt: str,
     ) -> ExtractionResult:
         """Extract structured data from vacancy text using Claude tool_use."""
-        # Check cache — keyed on text hash + schema so same vacancy isn't extracted twice
+        # Check cache — keyed on text hash + schema so the same vacancy
+        # isn't extracted twice.
         text_hash = hashlib.sha256(vacancy_text.encode()).hexdigest()[:16]
-        cache_params = {"text_hash": text_hash, "schema_keys": sorted(extraction_schema.keys())}
+        cache_params = {
+            "text_hash": text_hash,
+            "schema_keys": sorted(extraction_schema.keys()),
+        }
 
         if settings.api_cache_enabled:
-            cached = cache_get("claude_llm", cache_params, max_age_days=0)  # LLM cache never expires
+            cached = cache_get(
+                "claude_llm", cache_params, max_age_days=0
+            )  # LLM cache never expires
             if cached is not None:
                 logger.info("LLM cache hit: text_hash=%s", text_hash)
                 return ExtractionResult(

@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     kvk_api_key: str = ""
     apollo_api_key: str = ""
     enrichment_llm_model: str = "claude-sonnet-4-20250514"
+    chat_model: str = "claude-sonnet-4-20250514"
     enrichment_min_quality_threshold: float = 0.3
     scoring_hot_threshold: int = 80
     scoring_warm_threshold: int = 50

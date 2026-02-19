@@ -1,12 +1,10 @@
 """Tests for the file-based API response cache."""
 
 import json
-import tempfile
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from unittest.mock import patch
 
-from app.utils.api_cache import CACHE_DIR, cache_get, cache_put
+from app.utils.api_cache import cache_get, cache_put
 
 
 def test_cache_put_and_get(tmp_path):

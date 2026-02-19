@@ -1,8 +1,8 @@
 import logging
+import os
 from dataclasses import dataclass, field
 
 import httpx
-import os
 
 from app.config import settings
 from app.utils.api_cache import cache_get, cache_put

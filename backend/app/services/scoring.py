@@ -17,10 +17,7 @@ def _vacancy_age_date(v: Vacancy) -> datetime:
     Prefers published_at (actual publication date from source) over
     first_seen_at (when we first scraped it).
     """
-    if v.published_at is not None:
-        dt = v.published_at
-    else:
-        dt = v.first_seen_at
+    dt = v.published_at if v.published_at is not None else v.first_seen_at
     # Ensure timezone-aware
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC)
@@ -107,18 +104,58 @@ DEFAULT_MINIMUM_FILTERS: dict = {
         "enabled": False,
         "min_range": "50-99",  # minimum employee range to qualify
         "range_order": [
-            "1-9", "10-49", "50-99", "100-199",
-            "200-499", "500-999", "1000+",
+            "1-9",
+            "10-49",
+            "50-99",
+            "100-199",
+            "200-499",
+            "500-999",
+            "1000+",
         ],
     },
     "revenue": {
         "enabled": False,  # not always available; enabled when enriched
         "min_range": "10M-50M",
         "range_order": [
-            "<1M", "1M-10M", "10M-50M", "50M-100M",
-            "100M-500M", "500M+",
+            "<1M",
+            "1M-10M",
+            "10M-50M",
+            "50M-100M",
+            "100M-500M",
+            "500M+",
         ],
     },
+}
+
+# Excluded company types — staffing agencies, recruiters, etc.
+# These are not real end-customers; they post vacancies on behalf of clients.
+DEFAULT_EXCLUDED_COMPANY_TYPES: dict = {
+    "enabled": True,
+    "excluded_sbi_prefixes": [
+        "78",  # 7810 arbeidsbemiddeling, 7820 uitzendbureau, 7830 detachering
+    ],
+    "excluded_name_keywords": [
+        "detachering",
+        "uitzend",
+        "staffing",
+        "recruitment",
+        "interim",
+        "payroll",
+        "werving",
+        "selectie",
+        "flexwerk",
+        "talent connect",
+        "randstad",
+        "tempo-team",
+        "manpower",
+        "adecco",
+        "hays",
+        "brunel",
+        "yacht",
+        "michael page",
+        "robert half",
+        "robert walters",
+    ],
 }
 
 DEFAULT_TIMING_SIGNALS: dict = {
@@ -157,9 +194,7 @@ class ScoringService:
             logger.info("No companies to score for profile %d", profile_id)
             return {"scored": 0, "hot": 0, "warm": 0, "monitor": 0}
 
-        stats: dict = {
-            "scored": 0, "hot": 0, "warm": 0, "monitor": 0, "excluded": 0
-        }
+        stats: dict = {"scored": 0, "hot": 0, "warm": 0, "monitor": 0, "excluded": 0}
 
         for company_id in company_ids:
             lead = await self._score_company(company_id, profile_id, config)
@@ -202,7 +237,9 @@ class ScoringService:
 
         if config:
             thresholds = config.score_thresholds or {
-                "hot": 75, "warm": 50, "monitor": 25
+                "hot": 75,
+                "warm": 50,
+                "monitor": 25,
             }
             return {
                 "fit_weight": config.fit_weight,
@@ -213,6 +250,9 @@ class ScoringService:
                 "minimum_filters": thresholds.get(
                     "minimum_filters", DEFAULT_MINIMUM_FILTERS
                 ),
+                "excluded_company_types": thresholds.get(
+                    "excluded_company_types", DEFAULT_EXCLUDED_COMPANY_TYPES
+                ),
             }
 
         return {
@@ -222,6 +262,7 @@ class ScoringService:
             "timing_signals": DEFAULT_TIMING_SIGNALS,
             "score_thresholds": {"hot": 75, "warm": 50, "monitor": 25},
             "minimum_filters": DEFAULT_MINIMUM_FILTERS,
+            "excluded_company_types": DEFAULT_EXCLUDED_COMPANY_TYPES,
         }
 
     async def _score_company(
@@ -234,14 +275,19 @@ class ScoringService:
         if not company:
             return None
 
+        # Check excluded company types (staffing agencies, recruiters, etc.)
+        excluded_reason = self._check_excluded_company_types(
+            company, config.get("excluded_company_types", {})
+        )
+        if excluded_reason:
+            return await self._mark_excluded(company_id, profile_id, excluded_reason)
+
         # Check minimum company size filters (only when enrichment data exists)
         excluded_reason = self._check_minimum_filters(
             company, config.get("minimum_filters", {})
         )
         if excluded_reason:
-            return await self._mark_excluded(
-                company_id, profile_id, excluded_reason
-            )
+            return await self._mark_excluded(company_id, profile_id, excluded_reason)
 
         # Load active vacancies for this company + profile
         result = await self.db.execute(
@@ -517,7 +563,8 @@ class ScoringService:
         now = datetime.now(UTC)
 
         # Signal: vacancy open for more than 60 days
-        # Uses published_at (actual publication date) when available, falls back to first_seen_at
+        # Uses published_at (actual publication date) when available,
+        # falls back to first_seen_at.
         oldest_days = (
             max((now - _vacancy_age_date(v)).days for v in vacancies)
             if vacancies
@@ -671,6 +718,41 @@ class ScoringService:
                     return (
                         f"Revenue too low: {company.revenue_range} "
                         f"(minimum: {min_range})"
+                    )
+
+        return None
+
+    @staticmethod
+    def _check_excluded_company_types(company: Company, exclusions: dict) -> str | None:
+        """Check if a company is a staffing agency or recruiter.
+
+        Returns a reason string if excluded, None if the company qualifies.
+        Checks SBI codes and company name patterns.
+        """
+        if not exclusions.get("enabled", False):
+            return None
+
+        # Check SBI codes (e.g. 78xx = staffing/uitzend/detachering)
+        excluded_sbi = exclusions.get("excluded_sbi_prefixes", [])
+        if excluded_sbi and company.sbi_codes:
+            for sbi in company.sbi_codes:
+                sbi_str = str(sbi)
+                for prefix in excluded_sbi:
+                    if sbi_str.startswith(prefix):
+                        return (
+                            f"Excluded company type: SBI {sbi_str} "
+                            f"(staffing/uitzend/detachering)"
+                        )
+
+        # Check company name for staffing/recruitment keywords
+        name_keywords = exclusions.get("excluded_name_keywords", [])
+        if name_keywords and company.normalized_name:
+            name_lower = company.normalized_name.lower()
+            for keyword in name_keywords:
+                if keyword.lower() in name_lower:
+                    return (
+                        f"Excluded company type: name contains "
+                        f"'{keyword}' (staffing/recruitment)"
                     )
 
         return None

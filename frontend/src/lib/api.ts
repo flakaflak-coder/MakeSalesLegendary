@@ -457,6 +457,36 @@ export async function createExtractionPrompt(
   );
 }
 
+// --- Chat ---
+
+export interface ChatToolCall {
+  tool: string;
+  data: Record<string, unknown> | null;
+}
+
+export interface ChatResponse {
+  reply: string;
+  tool_calls: ChatToolCall[];
+}
+
+export async function sendChatMessage(
+  message: string,
+  context?: { profileId?: number; leadId?: number; page?: string }
+): Promise<ChatResponse> {
+  const body: Record<string, unknown> = { message };
+  if (context) {
+    body.context = {
+      profile_id: context.profileId ?? null,
+      lead_id: context.leadId ?? null,
+      page: context.page ?? null,
+    };
+  }
+  return apiFetch<ChatResponse>(`/api/chat`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 // --- Enrichment ---
 
 export async function triggerEnrichment(

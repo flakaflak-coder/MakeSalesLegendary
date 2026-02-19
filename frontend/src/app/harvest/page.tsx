@@ -71,6 +71,7 @@ export default function HarvestMonitorPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState(false);
+  const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null);
 
   async function load() {
     setLoading(true);
@@ -132,10 +133,11 @@ export default function HarvestMonitorPage() {
   }, [runs]);
 
   async function handleTriggerHarvest() {
-    if (profiles.length === 0) return;
+    const targetId = selectedProfileId ?? profiles[0]?.id;
+    if (!targetId) return;
     setTriggering(true);
     try {
-      await triggerHarvest(profiles[0].id);
+      await triggerHarvest(targetId);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to trigger harvest");
@@ -165,6 +167,17 @@ export default function HarvestMonitorPage() {
             >
               {"\uD83D\uDD04"} Refresh
             </button>
+            {profiles.length > 1 && (
+              <select
+                value={selectedProfileId ?? ""}
+                onChange={(e) => setSelectedProfileId(e.target.value ? Number(e.target.value) : null)}
+                className="rounded-md border border-border bg-background-card px-3 py-2 text-[13px] text-foreground transition-colors focus:border-accent focus:outline-none"
+              >
+                {profiles.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            )}
             <button
               onClick={handleTriggerHarvest}
               disabled={triggering || profiles.length === 0}

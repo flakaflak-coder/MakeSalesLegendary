@@ -52,7 +52,9 @@ class IndeedScraper:
             link_el = card.select_one("h2.jobTitle a")
             company_el = card.select_one("[data-testid='company-name']")
             location_el = card.select_one("[data-testid='text-location']")
-            date_el = card.select_one("[data-testid='myJobsStateDate']") or card.select_one(".date")
+            date_el = card.select_one(
+                "[data-testid='myJobsStateDate']"
+            ) or card.select_one(".date")
 
             if not title_el:
                 continue
