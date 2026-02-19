@@ -9,6 +9,7 @@ from app.models.enrichment import EnrichmentRun
 from app.models.extraction_prompt import ExtractionPrompt
 from app.schemas.enrichment import (
     EnrichmentRunResponse,
+    EnrichmentTriggerRequest,
     ExtractionPromptCreate,
     ExtractionPromptResponse,
 )
@@ -115,3 +116,17 @@ async def list_enrichment_runs(
         query = query.where(EnrichmentRun.pass_type == pass_type)
     result = await db.execute(query)
     return list(result.scalars().all())
+
+
+@router.post("/trigger", status_code=202)
+async def trigger_enrichment(payload: EnrichmentTriggerRequest) -> dict:
+    """Queue an enrichment run for a profile."""
+    from app.worker import trigger_enrichment_task
+
+    task = trigger_enrichment_task.delay(payload.profile_id, payload.pass_type)
+    return {
+        "status": "queued",
+        "task_id": task.id,
+        "profile_id": payload.profile_id,
+        "pass_type": payload.pass_type,
+    }
