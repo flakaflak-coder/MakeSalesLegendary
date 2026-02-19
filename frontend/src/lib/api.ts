@@ -106,6 +106,7 @@ export interface ApiLeadDetail {
   vacancies: Array<{
     id: number;
     job_title: string;
+    job_url: string | null;
     source: string;
     location: string | null;
     status: string;

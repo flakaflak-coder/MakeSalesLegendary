@@ -322,6 +322,7 @@ export default function LeadDetailPage({
     return {
       id: vacancy.id,
       title: vacancy.job_title,
+      jobUrl: vacancy.job_url,
       source: vacancy.source,
       firstSeenAt: vacancy.first_seen_at ?? "",
       lastSeenAt: vacancy.last_seen_at ?? "",
@@ -466,6 +467,20 @@ export default function LeadDetailPage({
       setLead(updated);
     } catch (err) {
       setError(toErrorMessage(err, "Failed to dismiss lead"));
+    } finally {
+      setDismissPending(false);
+    }
+  }
+
+  async function handleReactivateLead() {
+    if (!lead) return;
+    setDismissPending(true);
+    try {
+      await updateLeadStatus(lead.id, "monitor");
+      const updated = await getLead(lead.id);
+      setLead(updated);
+    } catch (err) {
+      setError(toErrorMessage(err, "Failed to re-activate lead"));
     } finally {
       setDismissPending(false);
     }
@@ -736,6 +751,18 @@ export default function LeadDetailPage({
                           <div>
                             <span className="text-[13px] font-medium text-foreground">
                               {vacancy.title}
+                              {vacancy.jobUrl && (
+                                <a
+                                  href={vacancy.jobUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="ml-1.5 inline-flex items-center text-accent hover:text-accent-hover"
+                                  title="View original posting"
+                                >
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              )}
                             </span>
                             <div className="mt-1 flex items-center gap-2">
                               <span
@@ -997,17 +1024,31 @@ export default function LeadDetailPage({
               >
                 {"\u{1F4E7}"} Export Details
               </button>
-              <button
-                type="button"
-                onClick={handleDismissLead}
-                disabled={dismissPending}
-                className={cn(
-                  "flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-[13px] font-medium text-danger transition-colors hover:bg-danger/5 active:bg-danger/10",
-                  dismissPending && "cursor-not-allowed opacity-70"
-                )}
-              >
-                {"\u{1F44B}"} {dismissPending ? "Dismissing..." : "Dismiss Lead"}
-              </button>
+              {lead.status === "dismissed" ? (
+                <button
+                  type="button"
+                  onClick={handleReactivateLead}
+                  disabled={dismissPending}
+                  className={cn(
+                    "flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-[13px] font-medium text-success transition-colors hover:bg-success/5 active:bg-success/10",
+                    dismissPending && "cursor-not-allowed opacity-70"
+                  )}
+                >
+                  {"\u{267B}\uFE0F"} {dismissPending ? "Re-activating..." : "Re-activate Lead"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleDismissLead}
+                  disabled={dismissPending}
+                  className={cn(
+                    "flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-[13px] font-medium text-danger transition-colors hover:bg-danger/5 active:bg-danger/10",
+                    dismissPending && "cursor-not-allowed opacity-70"
+                  )}
+                >
+                  {"\u{1F44B}"} {dismissPending ? "Dismissing..." : "Dismiss Lead"}
+                </button>
+              )}
             </div>
           </div>
 

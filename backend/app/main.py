@@ -1,3 +1,6 @@
+import asyncio
+
+import httpx
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -40,17 +43,67 @@ app.include_router(events_router, dependencies=[Depends(require_admin)])
 app.include_router(chat_router, dependencies=[Depends(require_admin)])
 
 
+async def _check_external_api(
+    name: str,
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    params: dict[str, str] | None = None,
+) -> tuple[str, dict[str, str | int]]:
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            response = await client.get(url, headers=headers, params=params)
+        if response.status_code >= 500:
+            return name, {"status": "error", "code": response.status_code}
+        return name, {"status": "ok", "code": response.status_code}
+    except Exception:
+        return name, {"status": "error"}
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     status = "ok"
     db_status = "ok"
+    external_status: dict[str, dict[str, str | int]] = {}
+
     try:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
     except Exception:
         status = "degraded"
         db_status = "error"
-    return {"status": status, "db": db_status}
+
+    checks = [
+        _check_external_api(
+            "kvk",
+            settings.kvk_api_base_url,
+            headers=(
+                {"apikey": settings.kvk_api_key} if settings.kvk_api_key else None
+            ),
+        ),
+        _check_external_api(
+            "apollo",
+            settings.apollo_api_base_url,
+            headers=(
+                {"x-api-key": settings.apollo_api_key}
+                if settings.apollo_api_key
+                else None
+            ),
+        ),
+        _check_external_api(
+            "serpapi",
+            "https://serpapi.com/search",
+            params=({"engine": "google_jobs"} if settings.serpapi_key else None),
+        ),
+    ]
+
+    results = await asyncio.gather(*checks)
+    for name, result in results:
+        external_status[name] = result
+        if result.get("status") == "error":
+            status = "degraded"
+
+    return {"status": status, "db": db_status, "external_apis": external_status}
 
 
 @app.exception_handler(Exception)

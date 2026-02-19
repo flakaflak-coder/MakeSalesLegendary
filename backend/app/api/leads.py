@@ -44,6 +44,7 @@ async def list_leads(
         Company.sbi_codes.label("company_sbi_codes"),
         Company.enrichment_status.label("company_enrichment_status"),
         Company.extraction_quality.label("company_extraction_quality"),
+        Company.enrichment_data.label("company_enrichment_data"),
     ).join(Company, Lead.company_id == Company.id)
 
     if profile_id is not None:
@@ -84,6 +85,12 @@ async def list_leads(
             if erp_value and erp_value != "unknown":
                 erp = erp_value
 
+        # Extract city and sector from Apollo enrichment data
+        enrichment = row.company_enrichment_data or {}
+        apollo = enrichment.get("apollo_data") or {}
+        city = apollo.get("city") if isinstance(apollo, dict) else None
+        sector = apollo.get("industry") if isinstance(apollo, dict) else None
+
         leads.append(
             {
                 "id": lead.id,
@@ -97,8 +104,8 @@ async def list_leads(
                 "oldest_vacancy_days": lead.oldest_vacancy_days,
                 "platform_count": lead.platform_count,
                 "company_name": row.company_name,
-                "company_city": None,
-                "company_sector": None,
+                "company_city": city,
+                "company_sector": sector,
                 "company_employee_range": row.company_employee_range,
                 "company_erp": erp,
                 "company_enrichment_status": row.company_enrichment_status,
@@ -203,6 +210,7 @@ async def get_lead(lead_id: int, db: DbSession) -> dict:
             {
                 "id": v.id,
                 "job_title": v.job_title,
+                "job_url": v.job_url,
                 "source": v.source,
                 "location": v.location,
                 "status": v.status,

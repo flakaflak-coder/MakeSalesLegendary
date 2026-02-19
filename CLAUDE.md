@@ -422,3 +422,4 @@ MakeSalesLegendary/
 - Added a frontend error mapper so API failures show user-friendly messages across major pages.
 - Re-ran backend tests and frontend lint cleanly.
 - Health check now includes a database connectivity probe and reports `status: degraded` when DB is unavailable.
+- Health check now probes external APIs (KvK, Apollo, SerpAPI) and reports their reachability.
