@@ -50,6 +50,8 @@ export interface ApiLeadListItem {
   company_sector: string | null;
   company_employee_range: string | null;
   company_erp: string | null;
+  company_enrichment_status: string | null;
+  company_extraction_quality: number | null;
 }
 
 export interface ApiLeadDetail {
@@ -75,6 +77,8 @@ export interface ApiLeadDetail {
     revenue_range: string | null;
     entity_count: number | null;
     enrichment_data: Record<string, unknown> | null;
+    enrichment_status: string | null;
+    extraction_quality: number | null;
   } | null;
   vacancies: Array<{
     id: number;

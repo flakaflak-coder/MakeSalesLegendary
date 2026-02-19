@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.harvest import HarvestRun
+from app.services.event_log import log_event
 from app.worker import trigger_harvest_task
 
 router = APIRouter(prefix="/api/harvest", tags=["harvest"])
@@ -35,9 +36,17 @@ class HarvestRunResponse(BaseModel):
 
 
 @router.post("/trigger", status_code=202)
-async def trigger_harvest(payload: TriggerRequest) -> dict:
+async def trigger_harvest(payload: TriggerRequest, db: DbSession) -> dict:
     """Queue a harvest run for a profile."""
     task = trigger_harvest_task.delay(payload.profile_id, payload.source)
+    log_event(
+        db,
+        event_type="harvest.triggered",
+        entity_type="profile",
+        entity_id=payload.profile_id,
+        metadata={"source": payload.source, "task_id": task.id},
+    )
+    await db.commit()
     return {
         "status": "queued",
         "task_id": task.id,

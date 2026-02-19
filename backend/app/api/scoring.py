@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.lead import ScoringConfig
 from app.schemas.lead import ScoringConfigResponse, ScoringConfigUpdate
+from app.services.event_log import log_event
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,13 @@ async def update_scoring_config(
         current.is_active = False
 
     db.add(new_config)
+    log_event(
+        db,
+        event_type="scoring.config_updated",
+        entity_type="profile",
+        entity_id=profile_id,
+        metadata={"version": new_config.version},
+    )
     await db.commit()
     await db.refresh(new_config)
 
@@ -168,6 +176,14 @@ async def trigger_scoring(profile_id: int, db: DbSession) -> dict:
         from app.worker import trigger_scoring_task
 
         task = trigger_scoring_task.delay(profile_id)
+        log_event(
+            db,
+            event_type="scoring.run_triggered",
+            entity_type="profile",
+            entity_id=profile_id,
+            metadata={"status": "queued", "task_id": task.id},
+        )
+        await db.commit()
         return {
             "status": "queued",
             "task_id": task.id,
@@ -180,6 +196,14 @@ async def trigger_scoring(profile_id: int, db: DbSession) -> dict:
 
         service = ScoringService(db=db)
         stats = await service.score_profile(profile_id)
+        log_event(
+            db,
+            event_type="scoring.run_triggered",
+            entity_type="profile",
+            entity_id=profile_id,
+            metadata={"status": "completed"},
+        )
+        await db.commit()
         return {
             "status": "completed",
             "profile_id": profile_id,

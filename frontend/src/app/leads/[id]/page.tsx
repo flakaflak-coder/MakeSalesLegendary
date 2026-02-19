@@ -12,6 +12,14 @@ import {
   Globe,
   Send,
   ChevronDown,
+  ExternalLink,
+  Linkedin,
+  Phone,
+  Factory,
+  Calendar,
+  DollarSign,
+  Tag,
+  DatabaseZap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -157,6 +165,52 @@ function getPoints(breakdown: JsonRecord, key: string): number | undefined {
   if (!entry || typeof entry !== "object") return undefined;
   const points = (entry as JsonRecord).points;
   return typeof points === "number" ? points : undefined;
+}
+
+// ── Apollo enrichment helpers ────────────────────────
+
+function getApolloData(
+  enrichmentData: Record<string, unknown> | null | undefined
+): Record<string, unknown> | null {
+  if (!enrichmentData) return null;
+  const apolloData = enrichmentData.apollo_data;
+  if (apolloData && typeof apolloData === "object") {
+    return apolloData as Record<string, unknown>;
+  }
+  return null;
+}
+
+function formatApolloRevenue(revenue: unknown): string | null {
+  if (typeof revenue !== "number" || revenue <= 0) return null;
+  if (revenue >= 1_000_000_000) {
+    return `$${(revenue / 1_000_000_000).toFixed(1)}B`;
+  }
+  if (revenue >= 1_000_000) {
+    return `$${(revenue / 1_000_000).toFixed(1)}M`;
+  }
+  if (revenue >= 1_000) {
+    return `$${(revenue / 1_000).toFixed(0)}K`;
+  }
+  return `$${revenue.toLocaleString()}`;
+}
+
+function apolloString(value: unknown): string | null {
+  if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  return null;
+}
+
+function apolloNumber(value: unknown): number | null {
+  if (typeof value === "number" && value > 0) return value;
+  return null;
+}
+
+function apolloStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter(
+      (item): item is string => typeof item === "string" && item.trim().length > 0
+    );
+  }
+  return [];
 }
 
 // ── Page ────────────────────────────────────────────
@@ -1016,6 +1070,174 @@ export default function LeadDetailPage({
               </div>
             </div>
           </div>
+
+          {/* ── Company Intelligence Card ──────────── */}
+          {(() => {
+            const apollo = getApolloData(company?.enrichment_data);
+            const websiteUrl = apollo ? apolloString(apollo.website_url) : null;
+            const linkedinUrl = apollo ? apolloString(apollo.linkedin_url) : null;
+            const phone = apollo ? apolloString(apollo.phone) ?? apolloString(apollo.sanitized_phone) : null;
+            const industry = apollo ? apolloString(apollo.industry) : null;
+            const foundedYear = apollo ? apolloNumber(apollo.founded_year) : null;
+            const annualRevenue = apollo ? formatApolloRevenue(apollo.annual_revenue) : null;
+            const employeeCount = apollo ? apolloNumber(apollo.estimated_num_employees) : null;
+            const keywords = apollo ? apolloStringArray(apollo.keywords) : [];
+
+            const hasAnyData =
+              websiteUrl ||
+              linkedinUrl ||
+              phone ||
+              industry ||
+              foundedYear ||
+              annualRevenue ||
+              employeeCount ||
+              keywords.length > 0;
+
+            return (
+              <div className="rounded-lg border border-border bg-background-card p-5">
+                <h3 className="mb-4 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-foreground-muted">
+                  <DatabaseZap className="h-3.5 w-3.5" />
+                  Company Intelligence
+                </h3>
+
+                {hasAnyData ? (
+                  <div className="space-y-3">
+                    {websiteUrl && (
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="flex items-center gap-1.5 text-[11px] text-foreground-muted">
+                          <Globe className="h-3 w-3 shrink-0" />
+                          Website
+                        </span>
+                        <a
+                          href={websiteUrl.startsWith("http") ? websiteUrl : `https://${websiteUrl}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 truncate text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
+                        >
+                          <span className="truncate">
+                            {websiteUrl.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}
+                          </span>
+                          <ExternalLink className="h-3 w-3 shrink-0" />
+                        </a>
+                      </div>
+                    )}
+
+                    {linkedinUrl && (
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="flex items-center gap-1.5 text-[11px] text-foreground-muted">
+                          <Linkedin className="h-3 w-3 shrink-0" />
+                          LinkedIn
+                        </span>
+                        <a
+                          href={linkedinUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 truncate text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
+                        >
+                          <span className="truncate">View profile</span>
+                          <ExternalLink className="h-3 w-3 shrink-0" />
+                        </a>
+                      </div>
+                    )}
+
+                    {phone && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-1.5 text-[11px] text-foreground-muted">
+                          <Phone className="h-3 w-3 shrink-0" />
+                          Phone
+                        </span>
+                        <span className="text-[13px] font-medium tabular-nums text-foreground">
+                          {phone}
+                        </span>
+                      </div>
+                    )}
+
+                    {industry && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-1.5 text-[11px] text-foreground-muted">
+                          <Factory className="h-3 w-3 shrink-0" />
+                          Industry
+                        </span>
+                        <span className="text-right text-[13px] font-medium text-foreground">
+                          {industry}
+                        </span>
+                      </div>
+                    )}
+
+                    {foundedYear && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-1.5 text-[11px] text-foreground-muted">
+                          <Calendar className="h-3 w-3 shrink-0" />
+                          Founded
+                        </span>
+                        <span className="text-[13px] font-medium tabular-nums text-foreground">
+                          {foundedYear}
+                        </span>
+                      </div>
+                    )}
+
+                    {annualRevenue && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-1.5 text-[11px] text-foreground-muted">
+                          <DollarSign className="h-3 w-3 shrink-0" />
+                          Annual Revenue
+                        </span>
+                        <span className="text-[13px] font-semibold tabular-nums text-foreground">
+                          {annualRevenue}
+                        </span>
+                      </div>
+                    )}
+
+                    {employeeCount && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-1.5 text-[11px] text-foreground-muted">
+                          <Users className="h-3 w-3 shrink-0" />
+                          Employees
+                        </span>
+                        <span className="text-[13px] font-semibold tabular-nums text-foreground">
+                          {employeeCount.toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+
+                    {keywords.length > 0 && (
+                      <div>
+                        <span className="mb-2 flex items-center gap-1.5 text-[11px] text-foreground-muted">
+                          <Tag className="h-3 w-3 shrink-0" />
+                          Keywords
+                        </span>
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {keywords.slice(0, 8).map((keyword) => (
+                            <span
+                              key={keyword}
+                              className="rounded border border-border-subtle bg-sand-50 px-1.5 py-0.5 text-[10px] font-medium text-foreground-muted"
+                            >
+                              {keyword}
+                            </span>
+                          ))}
+                          {keywords.length > 8 && (
+                            <span className="rounded border border-border-subtle bg-sand-50 px-1.5 py-0.5 text-[10px] font-medium text-foreground-faint">
+                              +{keywords.length - 8} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-border-subtle bg-sand-50 px-4 py-6 text-center">
+                    <DatabaseZap className="mx-auto mb-2 h-5 w-5 text-foreground-faint" />
+                    <p className="text-[12px] text-foreground-muted">
+                      No enrichment data yet
+                    </p>
+                    <p className="mt-1 text-[11px] text-foreground-faint">
+                      Run Apollo enrichment to populate company intelligence.
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* ── Sales GIF Card ───────────────────── */}
           {gifUrl && (

@@ -13,6 +13,7 @@ from app.schemas.enrichment import (
     ExtractionPromptCreate,
     ExtractionPromptResponse,
 )
+from app.services.event_log import log_event
 
 router = APIRouter(prefix="/api/enrichment", tags=["enrichment"])
 
@@ -119,11 +120,19 @@ async def list_enrichment_runs(
 
 
 @router.post("/trigger", status_code=202)
-async def trigger_enrichment(payload: EnrichmentTriggerRequest) -> dict:
+async def trigger_enrichment(payload: EnrichmentTriggerRequest, db: DbSession) -> dict:
     """Queue an enrichment run for a profile."""
     from app.worker import trigger_enrichment_task
 
     task = trigger_enrichment_task.delay(payload.profile_id, payload.pass_type)
+    log_event(
+        db,
+        event_type="enrichment.triggered",
+        entity_type="profile",
+        entity_id=payload.profile_id,
+        metadata={"pass_type": payload.pass_type, "task_id": task.id},
+    )
+    await db.commit()
     return {
         "status": "queued",
         "task_id": task.id,

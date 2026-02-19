@@ -40,6 +40,8 @@ class LeadListResponse(BaseModel):
     company_sector: str | None = None
     company_employee_range: str | None = None
     company_erp: str | None = None
+    company_enrichment_status: str | None = None
+    company_extraction_quality: float | None = None
 
 
 class LeadDetailResponse(LeadResponse):

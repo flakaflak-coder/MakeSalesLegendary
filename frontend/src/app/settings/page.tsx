@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Key,
   Bell,
@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { salesGifs, salesQuotes } from "@/lib/sales-gifs";
+import { getAnalyticsOverview, type ApiAnalyticsOverview } from "@/lib/api";
 
 /* -- Types ------------------------------------------------ */
 
@@ -40,6 +41,15 @@ export default function SettingsPage() {
   const [connectionStatus, setConnectionStatus] = useState<
     "idle" | "testing" | "success" | "error"
   >("idle");
+  const [overview, setOverview] = useState<ApiAnalyticsOverview | null>(null);
+  const [dbLoading, setDbLoading] = useState(true);
+
+  useEffect(() => {
+    getAnalyticsOverview()
+      .then(setOverview)
+      .catch((err) => console.error("Failed to load database stats:", err))
+      .finally(() => setDbLoading(false));
+  }, []);
 
   const apiKeys: ApiKeyField[] = [
     { label: "SerpAPI Key", envKey: "SERPAPI_KEY", configured: true },
@@ -288,21 +298,27 @@ export default function SettingsPage() {
             <div className="rounded-md border border-border-subtle bg-background-sunken px-4 py-3">
               <span className="text-[13px] text-foreground-secondary">
                 {"\uD83C\uDFE2"}{" "}
-                <span className="font-semibold text-foreground">847</span>{" "}
+                <span className="font-semibold text-foreground">
+                  {dbLoading ? "\u2014" : (overview?.companies ?? 0).toLocaleString()}
+                </span>{" "}
                 companies
               </span>
             </div>
             <div className="rounded-md border border-border-subtle bg-background-sunken px-4 py-3">
               <span className="text-[13px] text-foreground-secondary">
                 {"\uD83D\uDCCB"}{" "}
-                <span className="font-semibold text-foreground">1,234</span>{" "}
+                <span className="font-semibold text-foreground">
+                  {dbLoading ? "\u2014" : (overview?.vacancies.total ?? 0).toLocaleString()}
+                </span>{" "}
                 vacancies
               </span>
             </div>
             <div className="rounded-md border border-border-subtle bg-background-sunken px-4 py-3">
               <span className="text-[13px] text-foreground-secondary">
                 {"\uD83C\uDFAF"}{" "}
-                <span className="font-semibold text-foreground">47</span>{" "}
+                <span className="font-semibold text-foreground">
+                  {dbLoading ? "\u2014" : (overview?.leads.total ?? 0).toLocaleString()}
+                </span>{" "}
                 active leads
               </span>
             </div>

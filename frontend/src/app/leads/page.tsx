@@ -76,6 +76,9 @@ export default function LeadBoardPage() {
   const [leads, setLeads] = useState<ApiLeadListItem[]>([]);
   const [leadStats, setLeadStats] = useState<ApiLeadStats | null>(null);
   const [profiles, setProfiles] = useState<ApiProfile[]>([]);
+  const [selectedProfileId, setSelectedProfileId] = useState<number | null>(
+    null
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [harvestPending, setHarvestPending] = useState(false);
@@ -95,7 +98,30 @@ export default function LeadBoardPage() {
   useEffect(() => {
     let cancelled = false;
 
-    async function load() {
+    async function loadProfiles() {
+      try {
+        const profilesRes = await getProfiles();
+        if (cancelled) return;
+        setProfiles(profilesRes);
+        setSelectedProfileId((prev) => prev ?? profilesRes[0]?.id ?? null);
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Failed to load profiles");
+      }
+    }
+
+    loadProfiles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedProfileId) return;
+    let cancelled = false;
+
+    async function loadLeads() {
       setLoading(true);
       setError(null);
       try {
@@ -105,20 +131,19 @@ export default function LeadBoardPage() {
           timing: "timing_score",
           newest: "created_at",
         };
-        const [leadList, stats, profilesRes] = await Promise.all([
+        const [leadList, stats] = await Promise.all([
           getLeads({
+            profileId: selectedProfileId,
             limit: 200,
             sortBy: sortByMap[sortKey],
-            sortOrder: sortKey === "newest" ? "desc" : "desc",
+            sortOrder: "desc",
             status: activeTab === "all" ? undefined : activeTab,
           }),
-          getLeadStats(),
-          getProfiles(),
+          getLeadStats(selectedProfileId),
         ]);
         if (cancelled) return;
         setLeads(leadList);
         setLeadStats(stats);
-        setProfiles(profilesRes);
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : "Failed to load leads");
@@ -127,12 +152,12 @@ export default function LeadBoardPage() {
       }
     }
 
-    load();
+    loadLeads();
 
     return () => {
       cancelled = true;
     };
-  }, [activeTab, sortKey]);
+  }, [activeTab, sortKey, selectedProfileId]);
 
   const filtered = useMemo(() => {
     return leads.filter((lead) => {
@@ -151,16 +176,72 @@ export default function LeadBoardPage() {
   const quote = closerQuotes[1];
 
   async function handleTriggerHarvest() {
-    if (profiles.length === 0) return;
-    const profileId = profiles[0].id;
+    if (!selectedProfileId) return;
     setHarvestPending(true);
     try {
-      await triggerHarvest(profileId);
+      await triggerHarvest(selectedProfileId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to trigger harvest");
     } finally {
       setHarvestPending(false);
     }
+  }
+
+  function handleExport() {
+    if (filtered.length === 0) return;
+
+    const headers = [
+      "Company",
+      "City",
+      "Sector",
+      "Employees",
+      "ERP",
+      "Score",
+      "Fit",
+      "Timing",
+      "Status",
+      "Vacancies",
+      "Days Open",
+      "Platforms",
+    ];
+
+    function csvCell(value: string | number | null | undefined): string {
+      const str = String(value ?? "");
+      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    }
+
+    const rows = filtered.map((lead) =>
+      [
+        csvCell(lead.company_name),
+        csvCell(lead.company_city),
+        csvCell(lead.company_sector),
+        csvCell(lead.company_employee_range),
+        csvCell(lead.company_erp),
+        csvCell(lead.composite_score),
+        csvCell(lead.fit_score),
+        csvCell(lead.timing_score),
+        csvCell(lead.status),
+        csvCell(lead.vacancy_count),
+        csvCell(lead.oldest_vacancy_days),
+        csvCell(lead.platform_count),
+      ].join(",")
+    );
+
+    const csvContent = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const date = new Date().toISOString().slice(0, 10);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `signal-engine-leads-${date}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   }
 
   return (
@@ -178,7 +259,10 @@ export default function LeadBoardPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button className="flex items-center gap-1.5 rounded-md border border-border px-3.5 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-background-hover active:bg-background-active">
+            <button
+              onClick={handleExport}
+              className="flex items-center gap-1.5 rounded-md border border-border px-3.5 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-background-hover active:bg-background-active"
+            >
               <Download className="h-3.5 w-3.5" />
               Export
             </button>

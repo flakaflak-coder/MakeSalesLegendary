@@ -14,6 +14,7 @@ from app.schemas.lead import (
     LeadDetailResponse,
     LeadListResponse,
 )
+from app.services.event_log import log_event
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
 
@@ -41,6 +42,8 @@ async def list_leads(
         Company.name.label("company_name"),
         Company.employee_range.label("company_employee_range"),
         Company.sbi_codes.label("company_sbi_codes"),
+        Company.enrichment_status.label("company_enrichment_status"),
+        Company.extraction_quality.label("company_extraction_quality"),
     ).join(Company, Lead.company_id == Company.id)
 
     if profile_id is not None:
@@ -98,6 +101,8 @@ async def list_leads(
                 "company_sector": None,
                 "company_employee_range": row.company_employee_range,
                 "company_erp": erp,
+                "company_enrichment_status": row.company_enrichment_status,
+                "company_extraction_quality": row.company_extraction_quality,
             }
         )
 
@@ -189,6 +194,8 @@ async def get_lead(lead_id: int, db: DbSession) -> dict:
             "revenue_range": company.revenue_range,
             "entity_count": company.entity_count,
             "enrichment_data": company.enrichment_data,
+            "enrichment_status": company.enrichment_status,
+            "extraction_quality": company.extraction_quality,
         }
         if company
         else None,
@@ -239,6 +246,13 @@ async def update_lead_status(
         raise HTTPException(404, "Lead not found")
 
     lead.status = status
+    log_event(
+        db,
+        event_type="lead.status_updated",
+        entity_type="lead",
+        entity_id=lead.id,
+        metadata={"status": status},
+    )
     await db.commit()
     return {"id": lead.id, "status": lead.status}
 
@@ -276,6 +290,13 @@ async def submit_feedback(
         },
     )
     db.add(feedback)
+    log_event(
+        db,
+        event_type="lead.feedback_submitted",
+        entity_type="lead",
+        entity_id=lead.id,
+        metadata={"action": body.action},
+    )
     await db.commit()
     await db.refresh(feedback)
     return feedback
