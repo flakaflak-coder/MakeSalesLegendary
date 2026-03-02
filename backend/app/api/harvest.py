@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from typing import Annotated, Literal
 
@@ -10,7 +11,8 @@ from app.database import get_db
 from app.models.harvest import HarvestRun
 from app.models.profile import SearchProfile
 from app.services.event_log import log_event
-from app.worker import trigger_harvest_task
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/harvest", tags=["harvest"])
 
@@ -38,24 +40,57 @@ class HarvestRunResponse(BaseModel):
 
 @router.post("/trigger", status_code=202)
 async def trigger_harvest(payload: TriggerRequest, db: DbSession) -> dict:
-    """Queue a harvest run for a profile."""
+    """Queue a harvest run for a profile. Falls back to inline if no worker."""
     profile = await db.get(SearchProfile, payload.profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Search profile not found")
-    task = trigger_harvest_task.delay(payload.profile_id, payload.source)
+
+    from app.worker import has_celery_workers
+
+    if has_celery_workers():
+        from app.worker import trigger_harvest_task
+
+        task = trigger_harvest_task.delay(payload.profile_id, payload.source)
+        log_event(
+            db,
+            event_type="harvest.triggered",
+            entity_type="profile",
+            entity_id=payload.profile_id,
+            metadata={"source": payload.source, "task_id": task.id},
+        )
+        await db.commit()
+        return {
+            "status": "queued",
+            "task_id": task.id,
+            "profile_id": payload.profile_id,
+            "source": payload.source,
+        }
+
+    # No Celery worker — run inline
+    logger.info(
+        "No Celery workers, running harvest inline for profile %d",
+        payload.profile_id,
+    )
+    from app.services.harvester import HarvestService
+
+    service = HarvestService(db=db)
+    run = await service.run_harvest(
+        profile_id=payload.profile_id, source=payload.source
+    )
     log_event(
         db,
         event_type="harvest.triggered",
         entity_type="profile",
         entity_id=payload.profile_id,
-        metadata={"source": payload.source, "task_id": task.id},
+        metadata={"source": payload.source, "status": run.status},
     )
     await db.commit()
     return {
-        "status": "queued",
-        "task_id": task.id,
+        "status": run.status,
         "profile_id": payload.profile_id,
         "source": payload.source,
+        "vacancies_found": run.vacancies_found,
+        "vacancies_new": run.vacancies_new,
     }
 
 

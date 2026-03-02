@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 
 from celery import Celery
 from celery.schedules import crontab
@@ -10,6 +11,28 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 celery_app = Celery("signal_engine", broker=settings.redis_url)
+
+# Cache worker availability for 30 seconds to avoid pinging on every request.
+_worker_cache: dict[str, float | bool] = {"available": False, "checked_at": 0.0}
+
+
+def has_celery_workers() -> bool:
+    """Check if any Celery workers are running (cached for 30s)."""
+    now = time.monotonic()
+    checked_at = _worker_cache["checked_at"]
+    if isinstance(checked_at, float) and now - checked_at < 30:
+        return bool(_worker_cache["available"])
+    try:
+        response = celery_app.control.ping(timeout=1.0)
+        available = len(response) > 0
+    except Exception:
+        available = False
+    _worker_cache["available"] = available
+    _worker_cache["checked_at"] = now
+    if not available:
+        logger.debug("No Celery workers detected — tasks will run inline")
+    return available
+
 
 celery_app.conf.beat_schedule = {
     "harvest-all-profiles-daily": {

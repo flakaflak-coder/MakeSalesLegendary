@@ -5,7 +5,7 @@
 
 // ── Lead statuses ────────────────────────────────────
 
-export type LeadStatus = "hot" | "warm" | "monitor" | "dismissed" | "excluded";
+export type LeadStatus = "hot" | "warm" | "monitor" | "dismissed" | "excluded" | "inactive";
 export type FeedbackAction = "contacted" | "meeting" | "converted" | "rejected";
 
 export const statusConfig = {
@@ -44,6 +44,14 @@ export const statusConfig = {
   excluded: {
     label: "Excluded",
     emoji: "\u{1F6AB}",
+    color: "text-foreground-muted",
+    bg: "bg-sand-100",
+    dot: "bg-foreground-faint",
+    border: "border-border-subtle",
+  },
+  inactive: {
+    label: "Inactive",
+    emoji: "\u23F8\uFE0F",
     color: "text-foreground-muted",
     bg: "bg-sand-100",
     dot: "bg-foreground-faint",

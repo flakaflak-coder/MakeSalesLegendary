@@ -42,6 +42,9 @@ Thumbs.db
 htmlcov/
 .pytest_cache/
 
+# Cache data
+data/cache/
+
 # Claude Code personal files
 CLAUDE.local.md
 backend/test.db

@@ -1,7 +1,7 @@
 import logging
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -51,6 +51,27 @@ class HarvestService:
                 was_new = await self._store_vacancy(item, profile_id, run.id)
                 if was_new:
                     new_count += 1
+
+            # Mark vacancies not seen in this run as disappeared.
+            # Scoped to same profile + source — a Google Jobs run can't
+            # know about Indeed vacancies.
+            stale_result = await self.db.execute(
+                update(Vacancy)
+                .where(
+                    Vacancy.search_profile_id == profile_id,
+                    Vacancy.source == source,
+                    Vacancy.status == "active",
+                    Vacancy.last_seen_at < run.started_at,
+                )
+                .values(status="disappeared")
+            )
+            stale_count = stale_result.rowcount
+            if stale_count:
+                logger.info(
+                    "Harvest run %d: marked %d stale vacancies as disappeared",
+                    run.id,
+                    stale_count,
+                )
 
             run.status = "completed"
             run.vacancies_found = len(all_results)

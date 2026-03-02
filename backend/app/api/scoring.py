@@ -172,7 +172,9 @@ async def trigger_scoring(profile_id: int, db: DbSession) -> dict:
     config = result.scalar_one_or_none()
     config_version = config.version if config else 0
 
-    try:
+    from app.worker import has_celery_workers
+
+    if has_celery_workers():
         from app.worker import trigger_scoring_task
 
         task = trigger_scoring_task.delay(profile_id)
@@ -190,23 +192,23 @@ async def trigger_scoring(profile_id: int, db: DbSession) -> dict:
             "profile_id": profile_id,
             "scoring_config_version": config_version,
         }
-    except Exception:
-        # Celery not available — run inline
-        from app.services.scoring import ScoringService
 
-        service = ScoringService(db=db)
-        stats = await service.score_profile(profile_id)
-        log_event(
-            db,
-            event_type="scoring.run_triggered",
-            entity_type="profile",
-            entity_id=profile_id,
-            metadata={"status": "completed"},
-        )
-        await db.commit()
-        return {
-            "status": "completed",
-            "profile_id": profile_id,
-            "scoring_config_version": config_version,
-            **stats,
-        }
+    # No Celery worker — run inline
+    from app.services.scoring import ScoringService
+
+    service = ScoringService(db=db)
+    stats = await service.score_profile(profile_id)
+    log_event(
+        db,
+        event_type="scoring.run_triggered",
+        entity_type="profile",
+        entity_id=profile_id,
+        metadata={"status": "completed"},
+    )
+    await db.commit()
+    return {
+        "status": "completed",
+        "profile_id": profile_id,
+        "scoring_config_version": config_version,
+        **stats,
+    }

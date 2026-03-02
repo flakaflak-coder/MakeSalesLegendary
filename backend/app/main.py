@@ -13,6 +13,7 @@ from app.api.enrichment import router as enrichment_router
 from app.api.events import router as events_router
 from app.api.harvest import router as harvest_router
 from app.api.leads import router as leads_router
+from app.api.observatory import router as observatory_router
 from app.api.profiles import router as profiles_router
 from app.api.scoring import router as scoring_router
 from app.auth import require_admin
@@ -27,7 +28,12 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -40,6 +46,7 @@ app.include_router(leads_router, dependencies=[Depends(require_admin)])
 app.include_router(analytics_router, dependencies=[Depends(require_admin)])
 app.include_router(scoring_router, dependencies=[Depends(require_admin)])
 app.include_router(events_router, dependencies=[Depends(require_admin)])
+app.include_router(observatory_router, dependencies=[Depends(require_admin)])
 app.include_router(chat_router, dependencies=[Depends(require_admin)])
 
 
@@ -61,7 +68,7 @@ async def _check_external_api(
 
 
 @app.get("/health")
-async def health() -> dict[str, str]:
+async def health() -> dict:
     status = "ok"
     db_status = "ok"
     external_status: dict[str, dict[str, str | int]] = {}

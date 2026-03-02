@@ -40,6 +40,11 @@ const navigation = [
     href: "/events",
     emoji: "\uD83D\uDCCB",
   },
+  {
+    label: "Observatory",
+    href: "/observatory",
+    emoji: "\uD83D\uDD2D",
+  },
 ];
 
 const bottomNavigation = [

@@ -22,7 +22,10 @@ async def test_trigger_harvest(client: AsyncClient):
         },
     )
 
-    with patch("app.api.harvest.trigger_harvest_task") as mock_task:
+    with (
+        patch("app.worker.has_celery_workers", return_value=True),
+        patch("app.worker.trigger_harvest_task") as mock_task,
+    ):
         mock_task.delay = lambda *a, **kw: type("obj", (), {"id": "test-task-id"})()
         response = await client.post(
             "/api/harvest/trigger",

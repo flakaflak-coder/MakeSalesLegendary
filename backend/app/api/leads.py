@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/leads", tags=["leads"])
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
-VALID_STATUSES = {"hot", "warm", "monitor", "dismissed", "excluded"}
+VALID_STATUSES = {"hot", "warm", "monitor", "dismissed", "excluded", "inactive"}
 VALID_SORT_COLUMNS = {"composite_score", "fit_score", "timing_score", "created_at"}
 
 
@@ -52,8 +52,8 @@ async def list_leads(
     if status is not None:
         query = query.where(Lead.status == status)
     else:
-        # By default, hide excluded leads — they're below minimum company size
-        query = query.where(Lead.status != "excluded")
+        # By default, hide excluded and inactive leads
+        query = query.where(Lead.status.notin_(["excluded", "inactive"]))
     if min_score is not None:
         query = query.where(Lead.composite_score >= min_score)
     if max_score is not None:

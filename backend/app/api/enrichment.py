@@ -121,21 +121,60 @@ async def list_enrichment_runs(
 
 @router.post("/trigger", status_code=202)
 async def trigger_enrichment(payload: EnrichmentTriggerRequest, db: DbSession) -> dict:
-    """Queue an enrichment run for a profile."""
-    from app.worker import trigger_enrichment_task
+    """Queue an enrichment run for a profile. Falls back to inline if no worker."""
+    import logging
 
-    task = trigger_enrichment_task.delay(payload.profile_id, payload.pass_type)
+    from app.worker import has_celery_workers
+
+    _logger = logging.getLogger(__name__)
+
+    if has_celery_workers():
+        from app.worker import trigger_enrichment_task
+
+        task = trigger_enrichment_task.delay(payload.profile_id, payload.pass_type)
+        log_event(
+            db,
+            event_type="enrichment.triggered",
+            entity_type="profile",
+            entity_id=payload.profile_id,
+            metadata={"pass_type": payload.pass_type, "task_id": task.id},
+        )
+        await db.commit()
+        return {
+            "status": "queued",
+            "task_id": task.id,
+            "profile_id": payload.profile_id,
+            "pass_type": payload.pass_type,
+        }
+
+    # No Celery worker — run inline
+    _logger.info(
+        "No Celery workers, running enrichment inline for profile %d",
+        payload.profile_id,
+    )
+    from app.services.enrichment import EnrichmentOrchestrator
+
+    orchestrator = EnrichmentOrchestrator(db=db)
+    result = await orchestrator.run_full_enrichment(
+        profile_id=payload.profile_id, pass_type=payload.pass_type
+    )
+    summary = {}
+    for pass_name, run in result.items():
+        summary[pass_name] = {
+            "status": run.status,
+            "items_processed": run.items_processed,
+        }
     log_event(
         db,
         event_type="enrichment.triggered",
         entity_type="profile",
         entity_id=payload.profile_id,
-        metadata={"pass_type": payload.pass_type, "task_id": task.id},
+        metadata={"pass_type": payload.pass_type, "status": "completed"},
     )
     await db.commit()
     return {
-        "status": "queued",
-        "task_id": task.id,
+        "status": "completed",
         "profile_id": payload.profile_id,
         "pass_type": payload.pass_type,
+        "results": summary,
     }

@@ -1,7 +1,7 @@
 import logging
 from datetime import UTC, datetime
 
-from sqlalchemy import distinct, select
+from sqlalchemy import distinct, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Company
@@ -203,16 +203,55 @@ class ScoringService:
                 if lead.status in stats:
                     stats[lead.status] += 1
 
+        # Deactivate leads whose companies have no more active vacancies.
+        # These leads had vacancies that disappeared since the last run.
+        active_company_subq = (
+            select(distinct(Vacancy.company_id))
+            .where(
+                Vacancy.search_profile_id == profile_id,
+                Vacancy.company_id.isnot(None),
+                Vacancy.status == "active",
+            )
+            .correlate(None)
+            .scalar_subquery()
+        )
+        now = datetime.now(UTC)
+        stale_result = await self.db.execute(
+            update(Lead)
+            .where(
+                Lead.search_profile_id == profile_id,
+                Lead.status.notin_(["dismissed", "excluded", "inactive"]),
+                Lead.company_id.notin_(active_company_subq),
+            )
+            .values(
+                status="inactive",
+                vacancy_count=0,
+                composite_score=0,
+                fit_score=0,
+                timing_score=0,
+                scored_at=now,
+            )
+        )
+        deactivated = stale_result.rowcount
+        if deactivated:
+            logger.info(
+                "Deactivated %d leads with no active vacancies for profile %d",
+                deactivated,
+                profile_id,
+            )
+        stats["inactive"] = deactivated
+
         await self.db.commit()
         logger.info(
             "Scored %d companies for profile %d: "
-            "%d hot, %d warm, %d monitor, %d excluded",
+            "%d hot, %d warm, %d monitor, %d excluded, %d deactivated",
             stats["scored"],
             profile_id,
             stats["hot"],
             stats["warm"],
             stats["monitor"],
             stats["excluded"],
+            deactivated,
         )
         return stats
 

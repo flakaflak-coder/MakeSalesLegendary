@@ -511,6 +511,83 @@ export async function sendChatMessage(
   });
 }
 
+// --- Observatory ---
+
+export interface ApiObservatoryData {
+  generated_at: string;
+  entities: {
+    profiles: number;
+    search_terms: number;
+    companies: number;
+    vacancies: { total: number; by_status: Record<string, number> };
+    leads: { total: number; by_status: Record<string, number> };
+  };
+  pipeline: {
+    harvest: {
+      last_24h: Record<string, number>;
+      last_7d: {
+        by_status: Record<string, number>;
+        vacancies_found: number;
+        vacancies_new: number;
+      };
+      last_run: {
+        id: number;
+        status: string;
+        started_at: string | null;
+        completed_at: string | null;
+        vacancies_found: number;
+        vacancies_new: number;
+        error_message: string | null;
+      } | null;
+    };
+    enrichment: {
+      last_7d: Record<
+        string,
+        {
+          runs: number;
+          completed: number;
+          failed: number;
+          items_processed: number;
+          items_succeeded: number;
+          items_failed: number;
+        }
+      >;
+    };
+    llm: {
+      tokens_7d: { input: number; output: number; total: number };
+      tokens_30d: { input: number; output: number; total: number };
+    };
+  };
+  data_quality: {
+    company_enrichment: Record<string, number>;
+    extraction_quality: { average: number; companies_with_score: number };
+    vacancy_extraction: Record<string, number>;
+    kvk_coverage: { with_kvk: number; total: number; percentage: number };
+  };
+  scoring: {
+    avg_composite: number;
+    min_composite: number;
+    max_composite: number;
+    avg_fit: number;
+    avg_timing: number;
+    recently_scored_7d: number;
+  };
+  feedback: Record<string, number>;
+  recent_events: Array<{
+    id: number;
+    event_type: string;
+    entity_type: string;
+    entity_id: number | null;
+    metadata: Record<string, unknown>;
+    created_at: string | null;
+  }>;
+  events_24h: Record<string, number>;
+}
+
+export async function getObservatory(): Promise<ApiObservatoryData> {
+  return apiFetch<ApiObservatoryData>(`/api/observatory`);
+}
+
 // --- Enrichment ---
 
 export async function triggerEnrichment(

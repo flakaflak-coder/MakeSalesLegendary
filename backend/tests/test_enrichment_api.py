@@ -19,7 +19,10 @@ async def test_trigger_enrichment(client: AsyncClient):
         json={"name": "AP", "slug": "ap", "search_terms": []},
     )
 
-    with patch("app.worker.trigger_enrichment_task") as mock_task:
+    with (
+        patch("app.worker.has_celery_workers", return_value=True),
+        patch("app.worker.trigger_enrichment_task") as mock_task,
+    ):
         mock_task.delay = lambda *a, **kw: type("obj", (), {"id": "test-task-id"})()
         response = await client.post(
             "/api/enrichment/trigger",
